@@ -39,7 +39,6 @@ using boost::multiprecision::mpq_rational;
 using boost::multiprecision::mpfr_float_backend;
 
 typedef CGAL::Epeck_d<CGAL::Dynamic_dimension_tag>         Kd;
-//typedef CGAL::Cartesian_d<CGAL::Gmpq>                      Kd; 
 typedef CGAL::Delaunay_triangulation<Kd>                   Delaunay_triangulation; 
 typedef Delaunay_triangulation::Point                      Point;  
 typedef Delaunay_triangulation::Full_cell_handle           Full_cell_handle;
@@ -47,6 +46,8 @@ typedef Delaunay_triangulation::Full_cell_iterator         Full_cell_iterator;
 typedef Delaunay_triangulation::Finite_full_cell_iterator  Finite_full_cell_iterator; 
 typedef Delaunay_triangulation::Facet                      Facet;
 typedef Delaunay_triangulation::Vertex                     Vertex;
+
+namespace Polytopes {
 
 /**
  * A simple wrapper class that contains a matrix of rational vertex
@@ -555,5 +556,7 @@ MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
     
     return sample;
 }
+
+}   // namespace Polytopes
 
 #endif
