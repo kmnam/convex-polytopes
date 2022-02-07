@@ -490,6 +490,57 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
 }
 
 /**
+ * Parse the given .vert file specifying a convex polytope in terms of its 
+ * *vertices*, and *update* the given `Delaunay_triangulation` instance with 
+ * a new Delaunay triangulation of the convex polytope. 
+ *
+ * The file is assumed to be non-empty.  
+ *
+ * @param filename Path to input .vert polytope triangulation file.
+ * @param tri      Reference to existing `Delaunay_triangulation` instance. 
+ * @returns        Reference to updated `Delaunay_triangulation` instance. 
+ */
+Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_triangulation& tri) 
+{
+    // Parse the *first* line of the given input file to obtain the dimension
+    // of the polytope's ambient space 
+    std::string line, token; 
+    std::ifstream infile(filename);
+    std::getline(infile, line);
+
+    // Each vertex is specified as a space-delimited string of N coefficients,
+    // where N is the dimension of the ambient space 
+    std::stringstream ss_first; 
+    ss_first << line; 
+    std::vector<double> vertex_first; 
+    while (std::getline(ss_first, token, ' '))
+        vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
+    int dim = vertex_first.size();
+
+    // Insert the first point into the given triangulation
+    tri.insert(Point(dim, vertex_first.begin(), vertex_first.end())); 
+
+    // Parse each subsequent line in the input file 
+    while (std::getline(infile, line))
+    {
+        std::stringstream ss; 
+        std::vector<double> vertex; 
+        ss << line;
+        while (std::getline(ss, token, ' '))
+            vertex.push_back(std::stod(token));    // Store each vertex with double scalars 
+       
+        // Does the current vertex match all previous vertices in length? 
+        if (vertex.size() != dim)
+            throw std::runtime_error("Vertices of multiple dimensions specified in input file");
+
+        // Insert the current point into the Delaunay triangulation 
+        tri.insert(Point(dim, vertex.begin(), vertex.end()));
+    }
+
+    return tri; 
+}
+
+/**
  * Given a Delaunay triangulation of a convex polytope, sample uniformly from
  * different subsets of the polytope: 
  *
