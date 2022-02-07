@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/5/2022
+ *     2/8/2022
  */
 
 #ifndef POLYTOPES_HPP 
@@ -490,9 +490,8 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
 }
 
 /**
- * Given a .vert file specifying a convex polytope in terms of its vertices,
- * parse the vertices and sample uniformly from different subsets of the
- * polytope: 
+ * Given a Delaunay triangulation of a convex polytope, sample uniformly from
+ * different subsets of the polytope: 
  *
  * - If `codim == 0`, then sample from the *interior* of the polytope (the 
  *   union of its full-dimensional faces). 
@@ -502,7 +501,7 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  *
  * Note that the sampled points are returned as doubles.  
  *
- * @param filename Path to input .vert file of polytope vertices. 
+ * @param tri      Input triangulation.
  * @param npoints  Number of points to sample from the polytope.
  * @param codim    Codimension of the simplices to sample from. 
  * @param rng      Reference to existing random number generator instance.
@@ -510,13 +509,9 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  *                 matrix of sampled points. 
  */
 template <int CayleyMengerPrecision, int SamplePrecision> 
-MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
+MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints,
                                   const int codim, boost::random::mt19937& rng)
 {
-    // Parse the given .vert file and obtain the Delaunay triangulation of 
-    // the stored convex polytope 
-    Delaunay_triangulation tri = parseVerticesFile(filename); 
-
     // Obtain the desired subset of simplices in the triangulation  
     std::vector<Simplex> faces; 
     if (codim == 0) 
@@ -555,6 +550,38 @@ MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
     }
     
     return sample;
+}
+
+/**
+ * Given a .vert file specifying a convex polytope in terms of its vertices,
+ * parse the vertices and sample uniformly from different subsets of the
+ * polytope: 
+ *
+ * - If `codim == 0`, then sample from the *interior* of the polytope (the 
+ *   union of its full-dimensional faces). 
+ * - If `codim > 0`, then sample from the subset of the *boundary* of the 
+ *   polytope formed by the union of the faces of the given codimension on 
+ *   the polytope's boundary. 
+ *
+ * Note that the sampled points are returned as doubles.  
+ *
+ * @param filename Path to input .vert file of polytope vertices. 
+ * @param npoints  Number of points to sample from the polytope.
+ * @param codim    Codimension of the simplices to sample from. 
+ * @param rng      Reference to existing random number generator instance.
+ * @returns        Delaunay triangulation parsed from the given file and the 
+ *                 matrix of sampled points. 
+ */
+template <int CayleyMengerPrecision, int SamplePrecision> 
+MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
+                                  const int codim, boost::random::mt19937& rng)
+{
+
+    // Parse the given .vert file and obtain the Delaunay triangulation of 
+    // the stored convex polytope 
+    Delaunay_triangulation tri = parseVerticesFile(filename);
+
+    return sampleFromConvexPolytope<CayleyMengerPrecision, SamplePrecision>(tri, npoints, codim, rng); 
 }
 
 }   // namespace Polytopes
