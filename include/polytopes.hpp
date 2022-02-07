@@ -270,7 +270,7 @@ std::vector<std::vector<int> > combinations(const std::vector<int>& v, const int
  * @returns   Vector of `Simplex` objects, each containing the vertex coordinates
  *            of a full-dimensional face. 
  */
-std::vector<Simplex> getFullDimFaces(Delaunay_triangulation tri) 
+std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri) 
 {
     int dim = tri.current_dimension();  
     std::vector<Simplex> faces;
@@ -303,7 +303,7 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation tri)
  * @returns   Vector of vectors of vertex handles, each inner vector containing 
  *            handles to the vertices of a boundary facet. 
  */
-std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation tri)
+std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation& tri)
 {
     int dim = tri.current_dimension();
     std::vector<Simplex> facets;  
@@ -356,7 +356,7 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation tri)
  * @returns     Vector of vectors of vertex handles, each inner vector containing
  *              handles to the vertices of a boundary face of the given codimension. 
  */
-std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codim) 
+std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation& tri, const int codim) 
 {
     // Only faces of codimension 1, ..., dimension - 1 are valid 
     int tri_dim = tri.current_dimension(); 
