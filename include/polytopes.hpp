@@ -27,8 +27,8 @@
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
 #include <boost/random.hpp>
-#include <CGAL/Compact_container.h>
 #include <CGAL/Epick_d.h>
+#include <CGAL/Cartesian_d.h>
 #include <CGAL/Triangulation.h>
 #include <CGAL/Delaunay_triangulation.h>
 
@@ -38,7 +38,8 @@ using boost::multiprecision::gmp_int;
 using boost::multiprecision::mpq_rational;
 using boost::multiprecision::mpfr_float_backend;
 
-typedef CGAL::Epick_d<CGAL::Dynamic_dimension_tag>         Kd; 
+typedef CGAL::Epick_d<CGAL::Dynamic_dimension_tag>         Kd;
+//typedef CGAL::Cartesian_d<CGAL::Gmpq>                      Kd; 
 typedef CGAL::Delaunay_triangulation<Kd>                   Delaunay_triangulation; 
 typedef Delaunay_triangulation::Point                      Point;  
 typedef Delaunay_triangulation::Full_cell_handle           Full_cell_handle;
@@ -48,20 +49,21 @@ typedef Delaunay_triangulation::Facet                      Facet;
 typedef Delaunay_triangulation::Vertex                     Vertex;
 
 /**
- * A simple wrapper class that contains a matrix of vertex coordinates for 
- * a simplex. 
+ * A simple wrapper class that contains a matrix of rational vertex
+ * coordinates for a simplex. 
  */
 class Simplex
 {
     private:
         // Matrix of vertex coordinates (each row is a vertex)
-        MatrixXd vertices;  
+        Matrix<mpq_rational, Dynamic, Dynamic> vertices;  
 
     public:
         /**
-         * Trivial constructor that takes as input the matrix of vector coordinates. 
+         * Trivial constructor that takes as input the matrix of *rational* 
+         * vector coordinates. 
          */
-        Simplex(const Ref<const MatrixXd>& vertices)
+        Simplex(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& vertices) 
         {
             this->vertices = vertices; 
         }
@@ -73,7 +75,7 @@ class Simplex
         template <typename Derived>
         Simplex(const MatrixBase<Derived>& vertices) 
         {
-            this->vertices = vertices; 
+            this->vertices = vertices.template cast<mpq_rational>(); 
         }
 
         /**
@@ -86,7 +88,7 @@ class Simplex
         /**
          * Return the i-th vertex in the simplex as a (column) vector. 
          */
-        VectorXd getVertex(const unsigned i) 
+        Matrix<mpq_rational, Dynamic, 1> getVertex(const unsigned i) 
         {
             return this->vertices.row(i); 
         }
@@ -99,14 +101,15 @@ class Simplex
          * dimension in the same ambient space, is proportional to the
          * simplex's volume.
          *
-         * This computation is performed using high-precision (GMP) rational
-         * arithmetic.
+         * The determinant is computed using rational arithmetic; the square 
+         * root is computed using floating-point arithmetic with the given 
+         * precision. 
          *
          * @returns Square root of the absolute value of the Cayley-Menger
          *          determinant.   
          */
-        template <int Precision>
-        double sqrtAbsCayleyMenger()
+        template <int FloatPrecision>
+        number<mpfr_float_backend<FloatPrecision> > sqrtAbsCayleyMenger()
         {
             // Compute the symmetric distance matrix ...
             int nv = this->vertices.rows(); 
@@ -115,10 +118,7 @@ class Simplex
             {
                 for (unsigned k = j + 1; k < nv; ++k) 
                 {
-                    mpq_rational sqdist = (
-                        this->vertices.row(j).template cast<mpq_rational>() -
-                        this->vertices.row(k).template cast<mpq_rational>() 
-                    ).squaredNorm();
+                    mpq_rational sqdist = (this->vertices.row(j) - this->vertices.row(k)).squaredNorm(); 
                     A(j, k) = sqdist; 
                     A(k, j) = sqdist; 
                 }
@@ -130,8 +130,8 @@ class Simplex
             mpq_rational absdet = boost::multiprecision::abs(A.determinant());
             number<gmp_int> numer = boost::multiprecision::numerator(absdet); 
             number<gmp_int> denom = boost::multiprecision::denominator(absdet);
-            number<mpfr_float_backend<Precision> > ratio = numer / denom;   
-            return static_cast<double>(boost::multiprecision::sqrt(ratio)); 
+            number<mpfr_float_backend<FloatPrecision> > ratio = numer / denom;   
+            return boost::multiprecision::sqrt(ratio); 
         }
 
         /**
@@ -143,13 +143,16 @@ class Simplex
          * @param rng      Reference to random number generator instance.
          * @returns        Matrix of sampled point coordinates. 
          */
-        MatrixXd sample(unsigned npoints, boost::random::mt19937& rng)
+        template <int FloatPrecision>
+        Matrix<number<mpfr_float_backend<FloatPrecision> >, Dynamic, Dynamic> sample(unsigned npoints, boost::random::mt19937& rng)
         {
             unsigned dim = this->vertices.cols();     // Dimension of the ambient space
             unsigned nv = this->vertices.rows();      // Number of vertices
 
             // Sample the desired number of points from the flat Dirichlet 
             // distribution on the standard simplex of appropriate dimension
+            //
+            // This sampling is performed with double scalars 
             MatrixXd barycentric(npoints, nv); 
             boost::random::gamma_distribution<double> gamma_dist(1.0);
             for (unsigned i = 0; i < npoints; ++i)
@@ -162,9 +165,13 @@ class Simplex
             }
            
             // Convert from barycentric coordinates to Cartesian coordinates
-            MatrixXd points(npoints, dim); 
+            Matrix<number<mpfr_float_backend<FloatPrecision> >, Dynamic, Dynamic> points(npoints, dim); 
             for (unsigned i = 0; i < npoints; ++i)
-                points.row(i) = barycentric.row(i) * this->vertices; 
+            {
+                points.row(i) = (
+                    barycentric.row(i).template cast<mpq_rational>() * this->vertices
+                ).template cast<number<mpfr_float_backend<FloatPrecision> > >(); 
+            }
 
             return points;
         }
@@ -270,7 +277,7 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation tri)
     // Run through the finite full-dimensional simplices in the triangulation ...  
     for (Finite_full_cell_iterator it = tri.finite_full_cells_begin(); it != tri.finite_full_cells_end(); ++it)
     {
-        MatrixXd face_vertex_coords(dim + 1, dim); 
+        Matrix<mpq_rational, Dynamic, Dynamic> face_vertex_coords(dim + 1, dim); 
         
         // For each vertex in the face ...
         for (unsigned i = 0; i < dim + 1; ++i)
@@ -278,7 +285,7 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation tri)
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
             for (unsigned j = 0; j < dim; ++j)
-                face_vertex_coords(i, j) = p[j];  
+                face_vertex_coords(i, j) = mpq_rational(p[j]);  
         } 
         
         faces.emplace_back(Simplex(face_vertex_coords));
@@ -304,7 +311,7 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation tri)
     // in the triangulation ...  
     for (Full_cell_iterator it = tri.full_cells_begin(); it != tri.full_cells_end(); ++it)
     {
-        MatrixXd facet_vertex_coords(dim, dim); 
+        Matrix<mpq_rational, Dynamic, Dynamic> facet_vertex_coords(dim, dim); 
 
         // The facets are in bijective correspondence with the *infinite* 
         // full-dimensional simplices in the triangulation 
@@ -323,14 +330,14 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation tri)
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
             for (unsigned k = 0; k < dim; ++k)
-                facet_vertex_coords(i, k) = p[k];  
+                facet_vertex_coords(i, k) = mpq_rational(p[k]);  
         } 
         for (unsigned i = j + 1; i < tri.current_dimension() + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
             for (unsigned k = 0; k < dim; ++k)
-                facet_vertex_coords(i - 1, k) = p[k];  
+                facet_vertex_coords(i - 1, k) = mpq_rational(p[k]);  
         } 
 
         facets.emplace_back(Simplex(facet_vertex_coords)); 
@@ -361,16 +368,20 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
     if (codim == 1) 
         return facets;
 
-    // Generate all combinations of 0, ..., tri_dim - 1 of the length
-    // corresponding to the desired codimension
+    // Each simplex of dimension D is spanned by D + 1 vertices 
+    //
+    // Therefore, to generate all possible sub-faces of the boundary facets
+    // (dimension = tri_dim - 1), we generate all (face_dim + 1)-combinations
+    // of the range 0, ..., tri_dim - 1 of the length corresponding to the
+    // desired codimension
     std::vector<int> idx; 
     for (int i = 0; i < tri_dim; ++i)
         idx.push_back(i);
-    std::vector<std::vector<int> > combos = combinations(idx, face_dim);
+    std::vector<std::vector<int> > combos = combinations(idx, face_dim + 1);
 
     // Get the coordinates of all vertices in the triangulation in a single 
     // matrix
-    MatrixXd all_vertex_coords(tri.number_of_vertices(), tri_dim);
+    Matrix<mpq_rational, Dynamic, Dynamic> all_vertex_coords(tri.number_of_vertices(), tri_dim);
     int i = 0;  
     for (auto it = tri.vertices_begin(); it != tri.vertices_end(); ++it) 
     {
@@ -379,7 +390,7 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
             // Get the coordinates of each vertex
             Point p = it->point(); 
             for (unsigned j = 0; j < tri_dim; ++j) 
-                all_vertex_coords(i, j) = p[j];
+                all_vertex_coords(i, j) = mpq_rational(p[j]);
             i++;  
         }
     }
@@ -394,8 +405,8 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
         std::vector<int> vertex_indices_in_facet;
         for (unsigned i = 0; i < tri_dim; ++i)
         {
-            VectorXd v = f.getVertex(i);
-            VectorXd::Index nearest;
+            Matrix<mpq_rational, Dynamic, 1> v = f.getVertex(i);
+            Matrix<mpq_rational, Dynamic, 1>::Index nearest;
             (all_vertex_coords.rowwise() - v.transpose()).cwiseAbs().rowwise().sum().minCoeff(&nearest);
             vertex_indices_in_facet.push_back(static_cast<int>(nearest));
         }
@@ -450,10 +461,12 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
     ss_first << line; 
     std::vector<double> vertex_first; 
     while (std::getline(ss_first, token, ' '))
-        vertex_first.push_back(std::stod(token));
+        vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
     int dim = vertex_first.size();
 
     // Instantiate the Delaunay triangulation and insert the first point
+    // 
+    // All computations within the triangulation are performed with double scalars
     Delaunay_triangulation tri(dim); 
     tri.insert(Point(dim, vertex_first.begin(), vertex_first.end())); 
 
@@ -464,12 +477,15 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
         std::vector<double> vertex; 
         ss << line;
         while (std::getline(ss, token, ' '))
-            vertex.push_back(std::stod(token));
+            vertex.push_back(std::stod(token));    // Store each vertex with double scalars 
        
         // Does the current vertex match all previous vertices in length? 
         if (vertex.size() != dim)
             throw std::runtime_error("Vertices of multiple dimensions specified in input file");
 
+        // Insert the current point into the Delaunay triangulation 
+        //
+        // All computations within the triangulation are performed with double scalars
         tri.insert(Point(dim, vertex.begin(), vertex.end()));
     }
 
@@ -485,7 +501,9 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  *   union of its full-dimensional faces). 
  * - If `codim > 0`, then sample from the subset of the *boundary* of the 
  *   polytope formed by the union of the faces of the given codimension on 
- *   the polytope's boundary.  
+ *   the polytope's boundary. 
+ *
+ * Note that the sampled points are returned as doubles.  
  *
  * @param filename Path to input .vert file of polytope vertices. 
  * @param npoints  Number of points to sample from the polytope.
@@ -494,7 +512,7 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  * @returns        Delaunay triangulation parsed from the given file and the 
  *                 matrix of sampled points. 
  */
-template <int VolumePrecision = 100>
+template <int CayleyMengerPrecision, int SamplePrecision> 
 MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
                                   const int codim, boost::random::mt19937& rng)
 {
@@ -513,13 +531,16 @@ MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
 
     // Compute the (scaled) volume of each face 
     int dim = tri.current_dimension(); 
-    VectorXd volumes(faces.size()); 
+    Matrix<number<mpfr_float_backend<CayleyMengerPrecision> >, Dynamic, 1> volumes(faces.size()); 
     for (unsigned i = 0; i < faces.size(); ++i) 
-        volumes(i) = faces[i].sqrtAbsCayleyMenger<VolumePrecision>();
+        volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>(); 
 
     // Instantiate a categorical distribution with probabilities 
-    // proportional to the *boundary* simplex volumes 
-    VectorXd probs = volumes.cast<double>() / volumes.sum();
+    // proportional to the *boundary* simplex volumes
+    //
+    // The volumes are normalized into probabilities using double
+    // arithmetic  
+    VectorXd probs = (volumes / volumes.sum()).template cast<double>();
     std::vector<double> probs_vec; 
     for (unsigned i = 0; i < probs.size(); ++i)
         probs_vec.push_back(probs(i)); 
@@ -533,7 +554,7 @@ MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
         int j = dist(rng);
 
         // Get the corresponding simplex
-        sample.row(i) = faces[j].sample(1, rng); 
+        sample.row(i) = faces[j].sample<SamplePrecision>(1, rng).template cast<double>(); 
     }
     
     return sample;
