@@ -365,8 +365,8 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
     // corresponding to the desired codimension
     std::vector<int> idx; 
     for (int i = 0; i < tri_dim; ++i)
-        idx.push_back(i); 
-    std::vector<std::vector<int> > combos = combinations(idx, face_dim); 
+        idx.push_back(i);
+    std::vector<std::vector<int> > combos = combinations(idx, face_dim);
 
     // Get the coordinates of all vertices in the triangulation in a single 
     // matrix
@@ -391,17 +391,17 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
     {
         // Get the indices of the vertices of the facet, as dictated by the 
         // matrix of vertex coordinates for the full triangulation 
-        std::vector<int> vertex_indices_in_facet; 
+        std::vector<int> vertex_indices_in_facet;
         for (unsigned i = 0; i < tri_dim; ++i)
         {
             VectorXd v = f.getVertex(i);
-            VectorXd::Index nearest; 
-            (all_vertex_coords.rowwise() - v.transpose()).cwiseAbs().colwise().sum().minCoeff(&nearest);  
+            VectorXd::Index nearest;
+            (all_vertex_coords.rowwise() - v.transpose()).cwiseAbs().rowwise().sum().minCoeff(&nearest);
             vertex_indices_in_facet.push_back(static_cast<int>(nearest));
         }
 
         // Sort the vertex indices
-        std::sort(vertex_indices_in_facet.begin(), vertex_indices_in_facet.end()); 
+        std::sort(vertex_indices_in_facet.begin(), vertex_indices_in_facet.end());
 
         // For each combination of vertices (which corresponds to a sub-face
         // of the boundary facet of the desired codimension), generate the
@@ -411,13 +411,16 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
         {
             std::vector<int> sub; 
             for (auto it = c.begin(); it != c.end(); ++it)
-                sub.push_back(vertex_indices_in_facet[*it]); 
+                sub.push_back(vertex_indices_in_facet[*it]);
             std::string s = intVectorToString(sub);
 
             // If the combination (sub-face) was *not* encountered, then 
             // add it to the vector to be returned
-            if (face_strings.find(s) != face_strings.end())
-                faces.emplace_back(Simplex(all_vertex_coords(sub, all))); 
+            if (face_strings.find(s) == face_strings.end())
+            {
+                faces.emplace_back(Simplex(all_vertex_coords(sub, all)));
+                face_strings.insert(s); 
+            }
         }
     }
 
@@ -491,7 +494,7 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  * @returns        Delaunay triangulation parsed from the given file and the 
  *                 matrix of sampled points. 
  */
-template <int VolumePrecision>
+template <int VolumePrecision = 100>
 MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
                                   const int codim, boost::random::mt19937& rng)
 {
@@ -504,7 +507,7 @@ MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
     if (codim == 0) 
         faces = getFullDimFaces(tri); 
     else if (codim == 1) 
-        faces = getBoundaryFacets(tri); 
+        faces = getBoundaryFacets(tri);
     else 
         faces = getBoundaryFaces(tri, codim);
 
