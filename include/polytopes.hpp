@@ -27,7 +27,7 @@
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
 #include <boost/random.hpp>
-#include <CGAL/Epick_d.h>
+#include <CGAL/Epeck_d.h>
 #include <CGAL/Cartesian_d.h>
 #include <CGAL/Triangulation.h>
 #include <CGAL/Delaunay_triangulation.h>
@@ -38,7 +38,7 @@ using boost::multiprecision::gmp_int;
 using boost::multiprecision::mpq_rational;
 using boost::multiprecision::mpfr_float_backend;
 
-typedef CGAL::Epick_d<CGAL::Dynamic_dimension_tag>         Kd;
+typedef CGAL::Epeck_d<CGAL::Dynamic_dimension_tag>         Kd;
 //typedef CGAL::Cartesian_d<CGAL::Gmpq>                      Kd; 
 typedef CGAL::Delaunay_triangulation<Kd>                   Delaunay_triangulation; 
 typedef Delaunay_triangulation::Point                      Point;  
@@ -285,7 +285,7 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation tri)
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
             for (unsigned j = 0; j < dim; ++j)
-                face_vertex_coords(i, j) = mpq_rational(p[j]);  
+                face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
         } 
         
         faces.emplace_back(Simplex(face_vertex_coords));
@@ -330,14 +330,14 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation tri)
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
             for (unsigned k = 0; k < dim; ++k)
-                facet_vertex_coords(i, k) = mpq_rational(p[k]);  
+                facet_vertex_coords(i, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
         for (unsigned i = j + 1; i < tri.current_dimension() + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
             for (unsigned k = 0; k < dim; ++k)
-                facet_vertex_coords(i - 1, k) = mpq_rational(p[k]);  
+                facet_vertex_coords(i - 1, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
 
         facets.emplace_back(Simplex(facet_vertex_coords)); 
@@ -390,7 +390,7 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation tri, const int codi
             // Get the coordinates of each vertex
             Point p = it->point(); 
             for (unsigned j = 0; j < tri_dim; ++j) 
-                all_vertex_coords(i, j) = mpq_rational(p[j]);
+                all_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));
             i++;  
         }
     }
@@ -465,8 +465,6 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
     int dim = vertex_first.size();
 
     // Instantiate the Delaunay triangulation and insert the first point
-    // 
-    // All computations within the triangulation are performed with double scalars
     Delaunay_triangulation tri(dim); 
     tri.insert(Point(dim, vertex_first.begin(), vertex_first.end())); 
 
@@ -484,8 +482,6 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
             throw std::runtime_error("Vertices of multiple dimensions specified in input file");
 
         // Insert the current point into the Delaunay triangulation 
-        //
-        // All computations within the triangulation are performed with double scalars
         tri.insert(Point(dim, vertex.begin(), vertex.end()));
     }
 
