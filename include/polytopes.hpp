@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/8/2022
+ *     2/17/2022
  */
 
 #ifndef POLYTOPES_HPP 
@@ -559,7 +559,7 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
  * @returns        Delaunay triangulation parsed from the given file and the 
  *                 matrix of sampled points. 
  */
-template <int CayleyMengerPrecision, int SamplePrecision> 
+template <int CayleyMengerPrecision, int SamplePrecision = CayleyMengerPrecision> 
 MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints,
                                   const int codim, boost::random::mt19937& rng)
 {
@@ -623,11 +623,10 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
  * @returns        Delaunay triangulation parsed from the given file and the 
  *                 matrix of sampled points. 
  */
-template <int CayleyMengerPrecision, int SamplePrecision> 
+template <int CayleyMengerPrecision, int SamplePrecision = CayleyMengerPrecision> 
 MatrixXd sampleFromConvexPolytope(std::string filename, const int npoints,
                                   const int codim, boost::random::mt19937& rng)
 {
-
     // Parse the given .vert file and obtain the Delaunay triangulation of 
     // the stored convex polytope 
     Delaunay_triangulation tri = parseVerticesFile(filename);
