@@ -42,7 +42,7 @@ class LinearConstraints
         /**
          * Empty constructor. 
          */
-        LinearConstraints() : nearest_L2(CGAL::LARGER, false, 0.0, false, 0.0); 
+        LinearConstraints() : nearest_L2(CGAL::LARGER, false, 0.0, false, 0.0) 
         {
             this->N = 0;
             this->D = 0;
