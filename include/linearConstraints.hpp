@@ -36,7 +36,7 @@ class LinearConstraints
         int N;                /** Number of constraints.             */
         MatrixXd A;           /** Matrix of constraint coefficients. */ 
         VectorXd b;           /** Matrix of constraint values.       */ 
-        Program nearest_L2;   /** Quadratic program for nearest point queries. */ 
+        Program nearest_L2;   /** Quadratic program for nearest point queries. */
 
     public:
         /**
@@ -229,7 +229,7 @@ class LinearConstraints
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i,j));
+                    this->nearest_L2.set_a(j, i, this->A(i, j));
                 this->nearest_L2.set_b(i, this->b(i));
             }
             for (unsigned i = 0; i < this->D; ++i)
@@ -333,20 +333,22 @@ class LinearConstraints
 
         /**
          * Return the solution to the given linear program, with the feasible 
-         * region given by the stored constraints (`this->A * x >= this->b`). 
+         * region given by the stored constraints (`this->A * x >= this->b`).
+         *
+         * The linear program seeks to *minimize* the given objective function. 
          *
          * @param obj Vector of length `this->D` encoding the objective function.
          * @param c0  Constant term of the objective function.
          * @returns   Vector solution to the given linear program.  
          */
-        VectorXd solveLinearProgram(const Ref<const VectorXd>& obj, const double c0) 
+        VectorXd solveLinearProgram(const Ref<const VectorXd>& obj, const double c0)
         {
             // Instantiate the linear program ... 
             Program program(CGAL::LARGER, false, 0.0, false, 0.0);
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i, this->A(i,j));
+                    program.set_a(j, i, this->A(i, j));
                 program.set_b(i, this->b(i));
             }
             for (unsigned i = 0; i < this->D; ++i)
@@ -371,6 +373,42 @@ class LinearConstraints
                 i++;
             }
             return y;
+        }
+
+        /**
+         * Determine whether the k-th stored constraint is redundant.
+         *
+         * @param k Index (`0 <= k <= this->N - 1`) of constraint to be tested
+         *          for redundancy. 
+         * @returns True if the constraint is redundant, false otherwise.   
+         */
+        bool isRedundant(const int k)
+        {
+            // Instantiate the linear program (exclude the k-th constraint and 
+            // set the (negative of the) k-th constraint as the objective
+            // function to be minimized) ... 
+            Program program(CGAL::LARGER, false, 0.0, false, 0.0);
+            for (unsigned i = 0; i < k; ++i)
+            {
+                for (unsigned j = 0; j < this->D; ++j)
+                    program.set_a(j, i, this->A(i, j));
+                program.set_b(i, this->b(i));
+            }
+            for (unsigned i = k + 1; i < this->N; ++i)
+            {
+                for (unsigned j = 0; j < this->D; ++j)
+                    program.set_a(j, i, this->A(i, j));
+                program.set_b(i, this->b(i));
+            }
+            for (unsigned i = 0; i < this->D; ++i)
+                program.set_c(i, -this->A(k, i)); 
+            program.set_c0(0);
+
+            // ... and (try to) solve it 
+            Solution solution = CGAL::solve_quadratic_program(program, ET());
+
+            // Return whether a feasible solution could not be found 
+            return (solution.is_infeasible() || solution.is_unbounded() || !solution.is_optimal());
         }
 };
 
