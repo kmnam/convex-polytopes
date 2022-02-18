@@ -304,8 +304,8 @@ class LinearConstraints
                 indices.push_back(i);
             for (unsigned i = k + 1; i < this->N; ++i)
                 indices.push_back(i); 
-            this->A = this->A(indices, Eigen::all);
-            this->b = this->b(indices);
+            this->A = this->A(indices, Eigen::all).eval();
+            this->b = this->b(indices).eval();
             this->N--;    
         }
 
@@ -418,8 +418,7 @@ class LinearConstraints
         bool isRedundant(const int k)
         {
             // Instantiate the linear program (exclude the k-th constraint and 
-            // set the (negative of the) k-th constraint as the objective
-            // function to be minimized) ... 
+            // set the k-th constraint as the objective function to be minimized) ... 
             Program program(CGAL::LARGER, false, 0.0, false, 0.0);
             for (unsigned i = 0; i < k; ++i)
             {
@@ -430,18 +429,54 @@ class LinearConstraints
             for (unsigned i = k + 1; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i, this->A(i, j));
-                program.set_b(i, this->b(i));
+                    program.set_a(j, i - 1, this->A(i, j));
+                program.set_b(i - 1, this->b(i));
             }
             for (unsigned i = 0; i < this->D; ++i)
-                program.set_c(i, -this->A(k, i)); 
+                program.set_c(i, this->A(k, i)); 
             program.set_c0(0);
 
-            // ... and (try to) solve it 
+            // ... and (try to) solve it
             Solution solution = CGAL::solve_quadratic_program(program, ET());
 
-            // Return whether a feasible solution could not be found 
-            return (solution.is_infeasible() || solution.is_unbounded() || !solution.is_optimal());
+            // If the solution is infeasible, then return false (*not redundant*)
+            if (solution.is_infeasible() || solution.is_unbounded() || !solution.is_optimal())
+                return false; 
+
+            // If the solution is feasible, then check that the solution satisfies
+            // the excised constraint
+            VectorXd y = VectorXd::Zero(this->D);
+            unsigned i = 0;
+            for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
+            {
+                y(i) = CGAL::to_double(*it);
+                i++;
+            }
+            return (this->A.row(k) * y >= this->b(k)); 
+        }
+
+        /**
+         * Remove all redundant constraints by iterating through them in the 
+         * order they are given in `this->A` and `this->b`.   
+         */
+        void removeRedundantConstraints()
+        {
+            unsigned i = 0; 
+            while (i <= this->N) 
+            {
+                // If the i-th constraint is redundant, remove it and reset 
+                // i to zero (start from the beginning of the reduced system)
+                if (this->isRedundant(i))
+                {
+                    this->removeConstraint(i); 
+                    i = 0; 
+                }
+                // Otherwise, keep going 
+                else 
+                {
+                    i++; 
+                }
+            }
         }
 };
 
