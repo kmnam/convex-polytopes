@@ -279,7 +279,7 @@ class LinearConstraints
          * @param x Query vector.
          * @returns True if `this->A * x >= this->b`, false otherwise.  
          */
-        bool check(const Ref<const VectorXd>& x)
+        bool query(const Ref<const VectorXd>& x)
         {
             if (x.size() != this->D)
             {
@@ -290,6 +290,23 @@ class LinearConstraints
                 throw std::invalid_argument(ss.str());
             }
             return ((this->A * x).array() >= (this->b).array()).all();
+        }
+
+        /**
+         * Remove the `k`-th constraint.
+         *
+         * @param k Index (`0 <= k <= this->N - 1`) of constraint to be removed. 
+         */
+        void removeConstraint(const int k)
+        {
+            std::vector<int> indices; 
+            for (unsigned i = 0; i < k; ++i)
+                indices.push_back(i);
+            for (unsigned i = k + 1; i < this->N; ++i)
+                indices.push_back(i); 
+            this->A = this->A(indices, Eigen::all);
+            this->b = this->b(indices);
+            this->N--;    
         }
 
         /**
@@ -323,7 +340,7 @@ class LinearConstraints
         VectorXd nearestL2(const Ref<const VectorXd>& x)
         {
             // First check that x itself satisfies the constraints
-            if (this->check(x)) return x;
+            if (this->query(x)) return x;
 
             // Otherwise, solve the quadratic program for the nearest point to x
             for (unsigned i = 0; i < this->D; ++i)
@@ -392,7 +409,7 @@ class LinearConstraints
         }
 
         /**
-         * Determine whether the k-th stored constraint is redundant.
+         * Determine whether the `k`-th stored constraint is redundant.
          *
          * @param k Index (`0 <= k <= this->N - 1`) of constraint to be tested
          *          for redundancy. 
