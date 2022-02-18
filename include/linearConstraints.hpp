@@ -88,9 +88,9 @@ class LinearConstraints
             for (unsigned i = 0; i < this->D; ++i)
             {
                 this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c0(0.0);
                 this->nearest_L2.set_c(i, 0.0);
             }
+            this->nearest_L2.set_c0(0.0);
         } 
 
         /**
@@ -125,9 +125,9 @@ class LinearConstraints
             for (unsigned i = 0; i < this->D; ++i)
             {
                 this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c0(0.0);
                 this->nearest_L2.set_c(i, 0.0);
             }
+            this->nearest_L2.set_c0(0.0);
         }
 
         /**
@@ -193,15 +193,15 @@ class LinearConstraints
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i,j));
+                    this->nearest_L2.set_a(j, i, this->A(i, j));
                 this->nearest_L2.set_b(i, this->b(i));
             }
             for (unsigned i = 0; i < this->D; ++i)
             {
                 this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c0(0.0);
                 this->nearest_L2.set_c(i, 0.0);
             }
+            this->nearest_L2.set_c0(0.0);
         }
 
         /**
@@ -235,9 +235,9 @@ class LinearConstraints
             for (unsigned i = 0; i < this->D; ++i)
             {
                 this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c0(0.0);
                 this->nearest_L2.set_c(i, 0.0);
             }
+            this->nearest_L2.set_c0(0.0);
         }
 
         /**
@@ -321,6 +321,48 @@ class LinearConstraints
                 throw std::runtime_error("Failed to compute optimal solution");
 
             // Collect the values of the solution into a VectorXd
+            VectorXd y = VectorXd::Zero(this->D);
+            unsigned i = 0;
+            for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
+            {
+                y(i) = CGAL::to_double(*it);
+                i++;
+            }
+            return y;
+        }
+
+        /**
+         * Return the solution to the given linear program, with the feasible 
+         * region given by the stored constraints (`this->A * x >= this->b`). 
+         *
+         * @param obj Vector of length `this->D` encoding the objective function.
+         * @param c0  Constant term of the objective function.
+         * @returns   Vector solution to the given linear program.  
+         */
+        VectorXd solveLinearProgram(const Ref<const VectorXd>& obj, const double c0) 
+        {
+            // Instantiate the linear program ... 
+            Program program(CGAL::LARGER, false, 0.0, false, 0.0);
+            for (unsigned i = 0; i < this->N; ++i)
+            {
+                for (unsigned j = 0; j < this->D; ++j)
+                    program.set_a(j, i, this->A(i,j));
+                program.set_b(i, this->b(i));
+            }
+            for (unsigned i = 0; i < this->D; ++i)
+                program.set_c(i, obj(i)); 
+            program.set_c0(c0);
+
+            // ... and (try to) solve it ... 
+            Solution solution = CGAL::solve_quadratic_program(program, ET());
+            if (solution.is_infeasible())
+                throw std::runtime_error("Quadratic program is infeasible");
+            else if (solution.is_unbounded())
+                throw std::runtime_error("Quadratic program is unbounded");
+            else if (!solution.is_optimal())
+                throw std::runtime_error("Failed to compute optimal solution");
+
+            // ... and return the solution vector
             VectorXd y = VectorXd::Zero(this->D);
             unsigned i = 0;
             for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
