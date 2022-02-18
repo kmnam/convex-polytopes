@@ -249,11 +249,27 @@ class LinearConstraints
         }
 
         /**
-         * Return this->b.
+         * Return `this->b`.
          */
         VectorXd getb()
         {
             return this->b;
+        }
+
+        /**
+         * Return `this->N`.
+         */
+        int getN()
+        {
+            return this->N; 
+        }
+
+        /**
+         * Return `this->D`. 
+         */
+        int getD()
+        {
+            return this->D; 
         }
 
         /** 
