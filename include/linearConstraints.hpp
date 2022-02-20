@@ -462,7 +462,7 @@ class LinearConstraints
         void removeRedundantConstraints()
         {
             unsigned i = 0; 
-            while (i <= this->N) 
+            while (i < this->N) 
             {
                 // If the i-th constraint is redundant, remove it and reset 
                 // i to zero (start from the beginning of the reduced system)
