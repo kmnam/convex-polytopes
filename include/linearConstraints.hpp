@@ -164,7 +164,7 @@ class LinearConstraints
          * (inequalities), read in the constraint matrix and vector.
          *
          * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type (not denoted in the file).  
+         * @param type     Inequality type (not denoted in the file). 
          */
         void parse(const std::string filename, const InequalityType type)
         {
