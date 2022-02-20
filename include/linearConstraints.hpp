@@ -18,7 +18,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/18/2022
+ *     2/20/2022
  */
 using namespace Eigen;
 typedef CGAL::Gmpzf ET;
@@ -31,7 +31,7 @@ typedef CGAL::Quadratic_program_solution<ET> Solution;
  */
 class LinearConstraints
 {
-    private:
+    protected:
         int D;                /** Number of variables.               */ 
         int N;                /** Number of constraints.             */
         MatrixXd A;           /** Matrix of constraint coefficients. */ 
