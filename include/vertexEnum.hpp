@@ -6,9 +6,10 @@
 
 /**
  * A basic implementation of Avis & Fukuda's algorithm for vertex enumeration
- * in convex polytopes, from: Avis & Fukuda, A pivoting algorithm for convex
- * hulls and vertex enumeration of arrangements and polyhedra, Discrete Comput
- * Geom, 8: 295-313 (1992).  
+ * in convex polytopes, from:
+ *
+ * Avis & Fukuda, A pivoting algorithm for convex hulls and vertex enumeration
+ * of arrangements and polyhedra, Discrete Comput Geom, 8: 295-313 (1992).  
  *
  * **Author:**
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
@@ -28,14 +29,22 @@ namespace Polytopes {
 class PolyhedralDictionarySystem : public LinearConstraints
 {
     private:
-        int nrows;   /** Number of rows in the core linear system; set to this->N + 1. */
-        int ncols;   /** Number of columns in the core linear system; set to this->N + this->D + 2. */ 
-        Matrix<bool, Dynamic, 1> basis;   /** Boolean vector indicating the current basis. */ 
+        // Number of rows in the core linear system; set to this->N + 1
+        int nrows;
 
-        // Core system of linear equations whose dictionaries are to be enumerated 
+        // Number of columns in the core linear system; set to this->N + this->D + 2
+        int ncols;
+
+        // Boolean vector indicating the current basis, which should always 
+        // have size = this->N; initialized to 0, ..., this->N - 1
+        Matrix<bool, Dynamic, 1> basis;
+
+        // Core linear system whose dictionaries are to be enumerated; has 
+        // size (this->N + 1, this->N + this->D + 2)  
         MatrixXd core_A;
 
-        // Dictionary coefficient matrix corresponding to the current basis 
+        // Dictionary coefficient matrix corresponding to the current basis;
+        // has size (this-> 
         MatrixXd dict_coefs;
 
         /**
@@ -72,18 +81,17 @@ class PolyhedralDictionarySystem : public LinearConstraints
             block_basis_inv(this->N, 0) = 1;  
             block_cobasis(Eigen::all, Eigen::seqN(0, this->D)) = this->core_A(Eigen::all, cobasis_seq);
             block_cobasis.col(this->D) = this->core_A.col(this->N + this->D + 1);
-            this->dict_coefs = block_basis_inv * block_cobasis;  
+            this->dict_coefs = -block_basis_inv * block_cobasis;  
         }
 
         /**
          * Perform the given pivot between the i-th variable (in the basis) 
          * and the j-th variable (in the cobasis) of the current dictionary
-         * *without checking whether the pivot is primal and/or dual feasible*.
+         * *without checking whether i and j are valid indices or whether the
+         * pivot is primal and/or dual feasible*.
          *
          * @param i Index of basis variable. 
          * @param j Index of cobasis variable. 
-         * @throws std::invalid_argument If `i` is not in the current basis or 
-         *                               `j` is not in the current cobasis. 
          */
         void __pivot(const int i, const int j)
         {
@@ -97,14 +105,6 @@ class PolyhedralDictionarySystem : public LinearConstraints
                     cobasis_indices_except_ij.push_back(k); 
             } 
             
-            // Check whether the i-th variable is indeed in the basis 
-            if (i < 0 || i >= this->N + this->D || !this->basis(i))
-                throw std::invalid_argument("Undefined pivot: variable i is not in basis"); 
-
-            // Check whether the j-th variable is indeed in the cobasis 
-            if (j < 0 || j >= this->N + this->D || this->basis(j))
-                throw std::invalid_argument("Undefined pivot: variable j is not in cobasis");  
-
             // Perform the pivot
             this->basis(i) = false; 
             this->basis(j) = true;
@@ -121,6 +121,76 @@ class PolyhedralDictionarySystem : public LinearConstraints
                     this->dict_coefs(k, m) -= (dict_col_j(k) * dict_row_i(m) / dict_ij);
                 }
             }
+        }
+
+        /**
+         * Determine if the given pivot is a reverse Bland pivot, by:
+         * 
+         * 1) performing the given pivot,
+         * 2) determining the Bland pivot of the new dictionary,
+         * 3) reversing the given pivot to recover the old dictionary, and 
+         * 4) determining if this Bland pivot matches the reverse of the 
+         *    given pivot.  
+         *
+         * @param s Index of basis variable of the given pivot. 
+         * @param r Index of cobasis variable of the given pivot.
+         * @returns True if the pivot is a reverse Bland pivot, false otherwise.
+         * @throws std::runtime_error If the current dictionary is primal infeasible
+         *                            (rethrown exception thrown in `findBland()`).
+         */
+        bool isReverseBlandPivot(const int s, const int r)
+        {
+            // Perform the given pivot
+            this->__pivot(s, r);
+
+            // Determine the Bland pivot of the obtained dictionary 
+            int new_r, new_s; 
+            try
+            {
+                std::tie(new_r, new_s) = this->findBland(); 
+            }
+            catch (const std::runtime_error& e) 
+            {
+                throw; 
+            }
+
+            // Reverse the given pivot to recover the old dictionary
+            this->__pivot(r, s);
+
+            // Determine if this Bland pivot matches the reverse of the 
+            // given pivot 
+            return (new_r == r && new_s == s); 
+        }
+
+        /**
+         * Determine if the given pivot is a reverse criss-cross pivot, by:
+         * 
+         * 1) performing the given pivot,
+         * 2) determining the criss-cross pivot of the new dictionary,
+         * 3) reversing the given pivot to recover the old dictionary, and 
+         * 4) determining if this criss-cross pivot matches the reverse of the 
+         *    given pivot.  
+         *
+         * @param s Index of basis variable of the given pivot. 
+         * @param r Index of cobasis variable of the given pivot.
+         * @returns True if the pivot is a reverse criss-cross pivot, false
+         *          otherwise.
+         */
+        bool isReverseCrissCrossPivot(const int s, const int r)
+        {
+            // Perform the given pivot
+            this->__pivot(s, r);
+
+            // Determine the criss-cross pivot of the obtained dictionary 
+            int new_r, new_s; 
+            std::tie(new_r, new_s) = this->findBland(); 
+
+            // Reverse the given pivot to recover the old dictionary
+            this->__pivot(r, s);
+
+            // Determine if this criss-cross pivot matches the reverse of the 
+            // given pivot 
+            return (new_r == r && new_s == s); 
         }
 
     public:
@@ -221,82 +291,40 @@ class PolyhedralDictionarySystem : public LinearConstraints
          */
         int pivot(const int i, const int j)
         {
-            // Get all indices in the basis and cobasis 
-            std::vector<int> basis_indices_except_ij, cobasis_indices_except_ij; 
+            // Check whether the i-th variable is indeed in the basis 
+            if (i < 0 || i >= this->N + this->D || !this->basis(i))
+                throw std::invalid_argument("Undefined pivot: variable i is not in basis");
+
+            // Check whether the j-th variable is indeed in the cobasis 
+            if (j < 0 || j >= this->N + this->D || this->basis(j))
+                throw std::invalid_argument("Undefined pivot: variable j is not in cobasis");
+
+            // Check whether the dictionary is primal and/or dual feasible
+            bool all_primal_curr = this->isPrimalFeasible(i);
+            bool all_dual_curr = this->isDualFeasible(j);
             for (int k = 0; k < this->N + this->D; ++k)
             {
-                if (this->basis(k) && k != i)
-                    basis_indices_except_ij.push_back(k); 
-                else if (!this->basis(k) && k != j)
-                    cobasis_indices_except_ij.push_back(k); 
-            } 
-            
-            // Check whether the i-th variable is indeed in the basis and 
-            // the dictionary is primal feasible
-            if (i < 0 || i >= this->N + this->D || !this->basis(i))
-                throw std::invalid_argument("Undefined pivot: variable i is not in basis"); 
-            bool all_primal_curr = this->isPrimalFeasible(i);
-            for (const int k : basis_indices_except_ij) 
-            {
-                if (!this->isPrimalFeasible(k))
-                {
+                if (all_primal_curr && this->basis(k) && !this->isPrimalFeasible(k))
                     all_primal_curr = false; 
-                    break;
-                }
-            } 
-
-            // Check whether the j-th variable is indeed in the cobasis and 
-            // the dictionary is dual feasible 
-            if (j < 0 || j >= this->N + this->D || this->basis(j))
-                throw std::invalid_argument("Undefined pivot: variable j is not in cobasis");  
-            bool all_dual_curr = this->isDualFeasible(j);  
-            for (const int m : cobasis_indices_except_ij)
-            {
-                if (!this->isDualFeasible(m))
-                {
+                else if (all_dual_curr && !this->basis(k) && !this->isDualFeasible(k))
                     all_dual_curr = false; 
-                    break; 
-                }
-            } 
-
-            // Perform the pivot
-            this->basis(i) = false; 
-            this->basis(j) = true;
-            VectorXd dict_row_i = this->dict_coefs.row(i); 
-            VectorXd dict_col_j = this->dict_coefs.col(j);
-            double dict_ij = dict_row_i(j); 
-            this->dict_coefs(j, i) = 1 / dict_ij; 
-            this->dict_coefs.col(i) = dict_col_j / dict_ij; 
-            this->dict_coefs.row(j) = -dict_row_i / dict_ij;
-            for (int k : basis_indices_except_ij)
-            {
-                for (int m : cobasis_indices_except_ij) 
-                {
-                    this->dict_coefs(k, m) -= (dict_col_j(k) * dict_row_i(m) / dict_ij);
-                }
             }
+
+            // Perform the given pivot 
+            this->__pivot(i, j);  
 
             // Now check whether the new dictionary is primal feasible and/or 
             // dual feasible
             bool all_primal_next = this->isPrimalFeasible(j);
-            for (const int k : basis_indices_except_ij) 
-            {
-                if (!this->isPrimalFeasible(k))
-                {
-                    all_primal_next = false; 
-                    break;
-                }
-            } 
             bool all_dual_next = this->isDualFeasible(i); 
-            for (const int m : cobasis_indices_except_ij)
+            for (int k = 0; k < this->N + this->D; ++k)
             {
-                if (!this->isDualFeasible(m))
-                {
+                if (all_primal_next && this->basis(k) && !this->isPrimalFeasible(k))
+                    all_primal_next = false; 
+                else if (all_dual_next && !this->basis(k) && !this->isDualFeasible(k))
                     all_dual_next = false; 
-                    break; 
-                }
             }
-
+            
             // Return an indicator for whether the previous and/or new dictionaries
             // are primal and/or dual feasible 
             if (all_primal_curr && all_primal_next && all_dual_curr && all_dual_next)
@@ -310,13 +338,15 @@ class PolyhedralDictionarySystem : public LinearConstraints
         }
 
         /**
-         * Perform the pivot determined by Bland's rule on the current dictionary.
+         * Find the pivot determined by Bland's rule on the current dictionary
+         * and return the indices being switched.
          * 
-         * @returns True if the pivot was performed, false otherwise (because 
-         *          the current dictionary is dual feasible).
+         * @returns The basis index and cobasis index being switched by the 
+         *          Bland pivot, *or* the pair `[-1, -1]` if the dictionary is 
+         *          dual feasible. 
          * @throws std::runtime_error If the current dictionary is primal infeasible.
          */
-        bool pivotBland()
+        std::pair<int, int> findBland()
         {
             // Get all indices in the basis and cobasis 
             std::vector<int> basis_indices, cobasis_indices; 
@@ -333,7 +363,9 @@ class PolyhedralDictionarySystem : public LinearConstraints
             {
                 if (!this->isPrimalFeasible(k))
                 {
-                    throw std::runtime_error("Bland's rule cannot be performed on primal infeasible dictionary"); 
+                    throw std::runtime_error(
+                        "Bland's rule cannot be performed on primal infeasible dictionary"
+                    ); 
                 }
             } 
 
@@ -349,9 +381,9 @@ class PolyhedralDictionarySystem : public LinearConstraints
                 } 
             }
 
-            // If no such index exists, then return false 
+            // If no such index exists, then return [-1, -1]
             if (s == -1) 
-                return false; 
+                return std::make_pair(-1, -1); 
 
             // Find the least index in the basis obtaining the minimum value of
             // -(dict_coefs(i, N+D+1) / dict_coefs(i, s))
@@ -367,19 +399,42 @@ class PolyhedralDictionarySystem : public LinearConstraints
                 } 
             }
 
-            // Perform the corresponding pivot 
-            this->__pivot(r, s); 
-            return true; 
+            // Return the chosen indices 
+            return std::make_pair(r, s); 
         }
 
         /**
-         * Perform the pivot determined by the criss-cross rule on the current
-         * dictionary. 
-         * 
-         * @returns True if the pivot was performed, false otherwise (because 
-         *          the current dictionary is primal or dual feasible).
+         * Perform the pivot determined by Bland's rule on the current dictionary.
+         *
+         * @throws std::runtime_error If the current dictionary is primal infeasible
+         *                            (rethrown exception thrown in `findBland()`).
          */
-        bool pivotCrissCross()
+        void pivotBland()
+        {
+            int r, s;
+            try
+            { 
+                std::tie(r, s) = this->findBland();
+            }
+            catch (const std::runtime_error& e) 
+            {
+                throw; 
+            }
+
+            // Perform the pivot only if it is actually allowed 
+            if (r != -1) 
+                this->__pivot(r, s);
+        }
+
+        /**
+         * Find the pivot determined by the criss-cross rule on the current
+         * dictionary and return the indices being switched.  
+         * 
+         * @returns The basis index and cobasis index being switched by the 
+         *          criss-cross pivot, *or* the pair `[-1, -1]` if the
+         *          dictionary is primal or dual feasible. 
+         */
+        std::pair<int, int> findCrissCross()
         {
             // Get all indices in the basis and cobasis 
             std::vector<int> basis_indices, cobasis_indices; 
@@ -404,9 +459,9 @@ class PolyhedralDictionarySystem : public LinearConstraints
                 } 
             }
 
-            // If no such index exists, then return false 
+            // If no such index exists, then return [-1, -1]
             if (i == -1) 
-                return false; 
+                return std::make_pair(-1, -1); 
 
             // If i is in the basis ...
             int r, s; 
@@ -439,28 +494,41 @@ class PolyhedralDictionarySystem : public LinearConstraints
                 }
             }
 
-            // Perform the corresponding pivot 
-            this->__pivot(r, s); 
-            return true; 
+            // Return the chosen indices 
+            return std::make_pair(r, s); 
+        }
+
+        /**
+         * Perform the pivot determined by the criss-cross rule on the current
+         * dictionary. 
+         * 
+         * @returns True if the pivot was performed, false otherwise (because 
+         *          the current dictionary is primal or dual feasible).
+         */
+        bool pivotCrissCross()
+        {
+            int r, s;
+            std::tie(r, s) = this->findCrissCross();
+
+            // Perform the pivot only if it is actually allowed 
+            if (r != -1) 
+                this->__pivot(r, s);
+        }
+
+        /**
+         * Return the basic solution to the current dictionary, along with an 
+         * indicator for whether it is degenerate. 
+         *
+         * @returns The basic solution to the current dictionary, along with 
+         *          an indicator for whether the solution is degenerate.  
+         */ 
+        std::pair<VectorXd, bool> solve()
+        {
+            VectorXd cobasic = VectorXd::Zero(this->D + 1); 
+            cobasic(this->D) = 1; 
+            VectorXd basic = this->dict_coefs * cobasic;
+            return std::make_pair(basic, (basic == 0).any());  
         }
 }; 
-
-/**
- * Parse the given .poly file specifying a convex polytope in terms of its 
- * *half-spaces/inequalities*, and return a `LinearConstraints` instance 
- * storing these constraints. 
- *
- * The file is assumed to be non-empty.  
- *
- * @param filename Path to input .vert polytope triangulation file.
- */
-LinearConstraints parseInequalitiesFile(const std::string filename) 
-{
-    LinearConstraints constraints;
-    constraints.parse(filename);
-    constraints.removeRedundantConstraints();
-
-    return constraints;  
-}
 
 }   // namespace Polytopes 
