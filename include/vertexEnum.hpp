@@ -1,4 +1,7 @@
 #include <iostream>
+#include <stdexcept>
+#include <vector>
+#include <utility>
 #include <Eigen/Dense>
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
@@ -15,14 +18,12 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/19/2022
+ *     2/20/2022
  */
 using namespace Eigen;
 using boost::multiprecision::number; 
 using boost::multiprecision::mpq_rational; 
 using boost::multiprecision::mpfr_float_backend;
-const int INTERNAL_PRECISION = 100; 
-typedef number<mpfr_float_backend<INTERNAL_PRECISION> > LinAlgFloatType;
 
 namespace Polytopes {
 
@@ -242,8 +243,9 @@ class PolyhedralDictionarySystem : public LinearConstraints
          *
          * @param filename Path to file containing the polytope constraints. 
          */
-        void parse(const std::string filename) : LinearConstraints::parse(filename)
+        void parse(const std::string filename)
         {
+            LinearConstraints::parse(filename); 
             this->removeRedundantConstraints(); 
             this->update(); 
         }
@@ -501,11 +503,8 @@ class PolyhedralDictionarySystem : public LinearConstraints
         /**
          * Perform the pivot determined by the criss-cross rule on the current
          * dictionary. 
-         * 
-         * @returns True if the pivot was performed, false otherwise (because 
-         *          the current dictionary is primal or dual feasible).
          */
-        bool pivotCrissCross()
+        void pivotCrissCross()
         {
             int r, s;
             std::tie(r, s) = this->findCrissCross();
@@ -527,7 +526,7 @@ class PolyhedralDictionarySystem : public LinearConstraints
             VectorXd cobasic = VectorXd::Zero(this->D + 1); 
             cobasic(this->D) = 1; 
             VectorXd basic = this->dict_coefs * cobasic;
-            return std::make_pair(basic, (basic == 0).any());  
+            return std::make_pair(basic, (basic.array() == 0).any());  
         }
 }; 
 
