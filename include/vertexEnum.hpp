@@ -196,9 +196,11 @@ class PolyhedralDictionarySystem : public LinearConstraints
 
     public:
         /**
-         * Empty constructor. 
+         * Trivial constructor that specifies only the inequality type.
+         *
+         * @param type Inequality type. 
          */
-        PolyhedralDictionarySystem() : LinearConstraints()
+        PolyhedralDictionarySystem(const InequalityType type) : LinearConstraints(type)
         {
             this->update();
         }
@@ -207,12 +209,14 @@ class PolyhedralDictionarySystem : public LinearConstraints
          * Constructor that sets each variable to between the given lower 
          * and upper bounds.
          *
+         * @param type  Inequality type. 
          * @param D     Number of variables.
          * @param lower Lower bound for all variables. 
          * @param upper Upper bound for all variables.
          */
-        PolyhedralDictionarySystem(const int D, const double lower, const double upper)
-            : LinearConstraints(D, lower, upper)
+        PolyhedralDictionarySystem(const InequalityType type, const int D,
+                                   const double lower, const double upper)
+            : LinearConstraints(type, D, lower, upper)
         {
             this->update();
         }
@@ -220,11 +224,14 @@ class PolyhedralDictionarySystem : public LinearConstraints
         /**
          * Constructor with matrix and vector specifying the constraints. 
          *
-         * @param A Left-hand matrix in the constraints.
-         * @param b Right-hand vector in the constraints. 
+         * @param type Inequality type.
+         * @param A    Left-hand matrix in the constraints.
+         * @param b    Right-hand vector in the constraints. 
          */
-        PolyhedralDictionarySystem(const Ref<const MatrixXd>& A, const Ref<const VectorXd>& b)
-            : LinearConstraints(A, b) 
+        PolyhedralDictionarySystem(const InequalityType type,
+                                   const Ref<const MatrixXd>& A,
+                                   const Ref<const VectorXd>& b)
+            : LinearConstraints(type, A, b) 
         {
             this->update(); 
         } 
@@ -241,11 +248,12 @@ class PolyhedralDictionarySystem : public LinearConstraints
          * (inequalities), read in the constraint matrix and vector, remove 
          * redundant constraints, and overwrite the dictionary system. 
          *
-         * @param filename Path to file containing the polytope constraints. 
+         * @param filename Path to file containing the polytope constraints.
+         * @param type     Inequality type (not denoted in the file).  
          */
-        void parse(const std::string filename)
+        void parse(const std::string filename, const InequalityType type)
         {
-            LinearConstraints::parse(filename); 
+            LinearConstraints::parse(filename, type); 
             this->removeRedundantConstraints(); 
             this->update(); 
         }
