@@ -251,6 +251,37 @@ class PolyhedralDictionarySystem : public LinearConstraints
         }
 
         /**
+         * Return the left-hand matrix of the core linear system. 
+         *
+         * @returns Left-hand matrix of the core linear system. 
+         */
+        MatrixXd getCoreSystem()
+        {
+            return this->core_A; 
+        }
+
+        /**
+         * Return the boolean vector indicating the current choice of basis
+         * (and cobasis) indices. 
+         *
+         * @returns Boolean vector indicating current basis and cobasis indices.
+         */
+        Matrix<bool, Dynamic, 1> getBasis()
+        {
+            return this->basis; 
+        }
+
+        /**
+         * Return the current dictionary coefficient matrix. 
+         *
+         * @return Current dictionary coefficient matrix.
+         */
+        MatrixXd getDictCoefs()
+        {
+            return this->dict_coefs; 
+        }
+
+        /**
          * Return true if the i-th variable is primal feasible in the current
          * dictionary.
          *
