@@ -18,7 +18,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/20/2022
+ *     2/21/2022
  */
 using namespace Eigen;
 typedef CGAL::Gmpzf ET;
@@ -46,6 +46,79 @@ class LinearConstraints
         MatrixXd A;             /** Matrix of constraint coefficients. */ 
         VectorXd b;             /** Matrix of constraint values.       */ 
         Program nearest_L2;     /** Quadratic program for nearest-point queries. */
+
+        /**
+         * Given a file specifying a convex polytope in terms of half-spaces
+         * (inequalities), read in the constraint matrix and vector.
+         *
+         * This is the internal protected method used in `parse(filename)` and
+         * `parse(filename, type)`. 
+         *
+         * @param filename Path to file containing the polytope constraints.
+         * @param type     Inequality type (not denoted in the file).
+         */
+        void __parse(const std::string filename, const InequalityType type)
+        {
+            unsigned D = 0;
+            unsigned N = 0;
+            MatrixXd A(N, D);
+            VectorXd b(N);
+            
+            std::string line;
+            std::ifstream infile(filename); 
+            if (infile.is_open())
+            {
+                while (std::getline(infile, line))
+                {
+                    // Accumulate the entries in each line ...
+                    std::stringstream ss(line);
+                    std::string token;
+                    std::vector<double> row;
+                    N++;
+                    while (std::getline(ss, token, ' '))
+                        row.push_back(std::stod(token));
+
+                    // If this is the first row being parsed, get the number 
+                    // of columns in constraint matrix 
+                    if (D == 0)
+                        D = row.size() - 1;
+
+                    // Add the new constraint, with column 0 specifying the 
+                    // constant term and the remaining columns specifying the
+                    // linear coefficients:
+                    //
+                    // a0 + a1*x1 + a2*x2 + ... + aN*xN <=/>= 0
+                    //
+                    A.conservativeResize(N, D);
+                    b.conservativeResize(N);
+                    for (unsigned i = 1; i < row.size(); ++i)
+                        A(N-1, i-1) = row[i];
+                    b(N-1) = -row[0];
+                }
+                infile.close();
+            }
+            else
+                throw std::invalid_argument("Specified file does not exist");
+
+            // Update internal quadratic program with given matrix and vector
+            this->type = _type; 
+            this->A = A;
+            this->b = b;
+            this->N = N;
+            this->D = D;
+            for (unsigned i = 0; i < this->N; ++i)
+            {
+                for (unsigned j = 0; j < this->D; ++j)
+                    this->nearest_L2.set_a(j, i, this->A(i, j));
+                this->nearest_L2.set_b(i, this->b(i));
+            }
+            for (unsigned i = 0; i < this->D; ++i)
+            {
+                this->nearest_L2.set_d(i, i, 2.0);
+                this->nearest_L2.set_c(i, 0.0);
+            }
+            this->nearest_L2.set_c0(0.0);
+        }
 
     public:
         /**
@@ -160,76 +233,6 @@ class LinearConstraints
         }
 
         /**
-         * Given a file specifying a convex polytope in terms of half-spaces
-         * (inequalities), read in the constraint matrix and vector.
-         *
-         * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type (not denoted in the file). 
-         */
-        void parse(const std::string filename, const InequalityType type)
-        {
-            unsigned D = 0;
-            unsigned N = 0;
-            MatrixXd A(N, D);
-            VectorXd b(N);
-            
-            std::string line;
-            std::ifstream infile(filename); 
-            if (infile.is_open())
-            {
-                while (std::getline(infile, line))
-                {
-                    // Accumulate the entries in each line ...
-                    std::stringstream ss(line);
-                    std::string token;
-                    std::vector<double> row;
-                    N++;
-                    while (std::getline(ss, token, ' '))
-                        row.push_back(std::stod(token));
-
-                    // If this is the first row being parsed, get the number 
-                    // of columns in constraint matrix 
-                    if (D == 0)
-                        D = row.size() - 1;
-
-                    // Add the new constraint, with column 0 specifying the 
-                    // constant term and the remaining columns specifying the
-                    // linear coefficients:
-                    //
-                    // a0 + a1*x1 + a2*x2 + ... + aN*xN <=/>= 0
-                    //
-                    A.conservativeResize(N, D);
-                    b.conservativeResize(N);
-                    for (unsigned i = 1; i < row.size(); ++i)
-                        A(N-1, i-1) = row[i];
-                    b(N-1) = -row[0];
-                }
-                infile.close();
-            }
-            else
-                throw std::invalid_argument("Specified file does not exist");
-
-            // Update internal quadratic program with given matrix and vector
-            this->type = type; 
-            this->A = A;
-            this->b = b;
-            this->N = N;
-            this->D = D;
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i, j));
-                this->nearest_L2.set_b(i, this->b(i));
-            }
-            for (unsigned i = 0; i < this->D; ++i)
-            {
-                this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c(i, 0.0);
-            }
-            this->nearest_L2.set_c0(0.0);
-        }
-
-        /**
          * Update `this->type`. 
          *
          * @param type Inequality type. 
@@ -273,6 +276,29 @@ class LinearConstraints
                 this->nearest_L2.set_c(i, 0.0);
             }
             this->nearest_L2.set_c0(0.0);
+        }
+
+        /**
+         * Given a file specifying a convex polytope in terms of half-spaces
+         * (inequalities), read in the constraint matrix and vector.
+         *
+         * @param filename Path to file containing the polytope constraints.
+         */
+        void parse(const std::string filename)
+        {
+            this->parse(filename, this->type); 
+        }
+
+        /**
+         * Given a file specifying a convex polytope in terms of half-spaces
+         * (inequalities), read in the constraint matrix and vector.
+         *
+         * @param filename Path to file containing the polytope constraints.
+         * @param type     Inequality type (not denoted in the file).
+         */
+        void parse(const std::string filename, const InequalityType type)
+        {
+            this->parse(filename, type); 
         }
 
         /**
