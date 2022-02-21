@@ -286,7 +286,7 @@ class LinearConstraints
          */
         void parse(const std::string filename)
         {
-            this->parse(filename, this->type); 
+            this->__parse(filename, this->type); 
         }
 
         /**
@@ -298,7 +298,7 @@ class LinearConstraints
          */
         void parse(const std::string filename, const InequalityType type)
         {
-            this->parse(filename, type); 
+            this->__parse(filename, type); 
         }
 
         /**
