@@ -101,7 +101,7 @@ class LinearConstraints
                 throw std::invalid_argument("Specified file does not exist");
 
             // Update internal quadratic program with given matrix and vector
-            this->type = _type; 
+            this->type = type; 
             this->A = A;
             this->b = b;
             this->N = N;
