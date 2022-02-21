@@ -249,11 +249,25 @@ class PolyhedralDictionarySystem : public LinearConstraints
          * redundant constraints, and overwrite the dictionary system. 
          *
          * @param filename Path to file containing the polytope constraints.
+         */
+        void parse(const std::string filename)
+        {
+            this->__parse(filename, this->type); 
+            this->removeRedundantConstraints(); 
+            this->update(); 
+        }
+
+        /**
+         * Given a file specifying a convex polytope in terms of half-spaces 
+         * (inequalities), read in the constraint matrix and vector, remove 
+         * redundant constraints, and overwrite the dictionary system. 
+         *
+         * @param filename Path to file containing the polytope constraints.
          * @param type     Inequality type (not denoted in the file). 
          */
         void parse(const std::string filename, const InequalityType type)
         {
-            LinearConstraints::parse(filename, type); 
+            this->__parse(filename, type); 
             this->removeRedundantConstraints(); 
             this->update(); 
         }
