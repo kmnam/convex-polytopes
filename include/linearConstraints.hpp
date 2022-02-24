@@ -18,7 +18,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/21/2022
+ *     2/25/2022
  */
 using namespace Eigen;
 typedef CGAL::Gmpzf ET;
@@ -37,15 +37,37 @@ enum InequalityType
  * A class that implements a set of linear constraints among a set of
  * variables, `A * x <=/>= b`.
  */
+template <typename T>
 class LinearConstraints
 {
     protected:
-        InequalityType type;    /** Inequality type.                   */
-        int D;                  /** Number of variables.               */ 
-        int N;                  /** Number of constraints.             */
-        MatrixXd A;             /** Matrix of constraint coefficients. */ 
-        VectorXd b;             /** Matrix of constraint values.       */ 
-        Program nearest_L2;     /** Quadratic program for nearest-point queries. */
+        InequalityType type;              /** Inequality type.                   */
+        int D;                            /** Number of variables.               */ 
+        int N;                            /** Number of constraints.             */
+        Matrix<T, Dynamic, Dynamic> A;    /** Matrix of constraint coefficients. */ 
+        Matrix<T, Dynamic, 1>       b;    /** Matrix of constraint values.       */ 
+        Program nearest_L2;               /** Quadratic program for nearest-point queries. */
+
+        /**
+         * Update the internal nearest-point by-L2-distance quadratic program
+         * with coefficients given by the current constraint matrix and vector. 
+         */
+        void __updateNearestL2()
+        {
+            // Convert all coefficients to double scalars 
+            for (unsigned i = 0; i < this->N; ++i)
+            {
+                for (unsigned j = 0; j < this->D; ++j)
+                    this->nearest_L2.set_a(j, i, static_cast<double>(this->A(i, j)));
+                this->nearest_L2.set_b(i, static_cast<double>(this->b(i)));
+            }
+            for (unsigned i = 0; i < this->D; ++i)
+            {
+                this->nearest_L2.set_d(i, i, 2);
+                this->nearest_L2.set_c(i, 0);
+            }
+            this->nearest_L2.set_c0(0);
+        }
 
         /**
          * Given a file specifying a convex polytope in terms of half-spaces
@@ -61,8 +83,8 @@ class LinearConstraints
         {
             unsigned D = 0;
             unsigned N = 0;
-            MatrixXd A(N, D);
-            VectorXd b(N);
+            Matrix<T, Dynamic, Dynamic> A(N, D);
+            Matrix<T, Dynamic, 1> b(N);
             
             std::string line;
             std::ifstream infile(filename); 
@@ -73,10 +95,14 @@ class LinearConstraints
                     // Accumulate the entries in each line ...
                     std::stringstream ss(line);
                     std::string token;
-                    std::vector<double> row;
+                    std::vector<T> row;
                     N++;
                     while (std::getline(ss, token, ' '))
-                        row.push_back(std::stod(token));
+                    {
+                        // Parse each line as a double, then convert to the
+                        // scalar type of choice
+                        row.push_back(static_cast<T>(std::stod(token)));
+                    }
 
                     // If this is the first row being parsed, get the number 
                     // of columns in constraint matrix 
@@ -100,24 +126,12 @@ class LinearConstraints
             else
                 throw std::invalid_argument("Specified file does not exist");
 
-            // Update internal quadratic program with given matrix and vector
             this->type = type; 
             this->A = A;
             this->b = b;
             this->N = N;
             this->D = D;
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i, j));
-                this->nearest_L2.set_b(i, this->b(i));
-            }
-            for (unsigned i = 0; i < this->D; ++i)
-            {
-                this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c(i, 0.0);
-            }
-            this->nearest_L2.set_c0(0.0);
+            this->__updateNearestL2();
         }
 
     public:
@@ -133,8 +147,8 @@ class LinearConstraints
             this->type = type; 
             this->N = 0;
             this->D = 0;
-            this->A = MatrixXd::Zero(0, 0);
-            this->b = VectorXd::Zero(0);
+            this->A = Matrix<T, Dynamic, Dynamic>::Zero(0, 0);
+            this->b = Matrix<T, Dynamic, 1>::Zero(0);
         }
 
         /**
@@ -146,8 +160,8 @@ class LinearConstraints
          * @param lower Lower bound for all variables. 
          * @param upper Upper bound for all variables. 
          */
-        LinearConstraints(const InequalityType type, const int D,
-                          const double lower, const double upper)
+        LinearConstraints(const InequalityType type, const int D, const T lower,
+                          const T upper)
             : nearest_L2((type == LessThanOrEqualTo ? CGAL::SMALLER : CGAL::LARGER),
                          false, 0.0, false, 0.0)  
         {
@@ -160,28 +174,24 @@ class LinearConstraints
             this->b.resize(this->N);
             for (unsigned i = 0; i < this->D; ++i)
             {
-                VectorXd v = VectorXd::Zero(this->D);
-                v(i) = 1.0;
-                this->A.row(i) = v.transpose();
-                this->A.row(this->D + i) = -v.transpose();
-                this->b(i) = lower;
-                this->b(this->D + i) = -upper;
+                Matrix<T, Dynamic, 1> v = Matrix<T, Dynamic, 1>::Zero(this->D);
+                v(i) = 1;
+                if (this->type == LessThanOrEqualTo)
+                {
+                    this->A.row(i) = -v.transpose();
+                    this->A.row(this->D + i) = v.transpose();
+                    this->b(i) = -lower;
+                    this->b(this->D + i) = upper;
+                }
+                else
+                {
+                    this->A.row(i) = v.transpose();
+                    this->A.row(this->D + i) = -v.transpose();
+                    this->b(i) = lower;
+                    this->b(this->D + i) = -upper;
+                }
             }
-
-            // Update internal quadratic program with inequalities implied by 
-            // the given bounds 
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i, j));
-                this->nearest_L2.set_b(i, this->b(i));
-            }
-            for (unsigned i = 0; i < this->D; ++i)
-            {
-                this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c(i, 0.0);
-            }
-            this->nearest_L2.set_c0(0.0);
+            this->__updateNearestL2(); 
         } 
 
         /**
@@ -191,8 +201,8 @@ class LinearConstraints
          * @param A    Left-hand matrix in the constraints.
          * @param b    Right-hand vector in the constraints.  
          */
-        LinearConstraints(const InequalityType type, const Ref<const MatrixXd>& A,
-                          const Ref<const VectorXd>& b)
+        LinearConstraints(const InequalityType type, const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
+                          const Ref<const Matrix<T, Dynamic, 1> >& b)
             : nearest_L2((type == LessThanOrEqualTo ? CGAL::SMALLER : CGAL::LARGER),
                          false, 0.0, false, 0.0) 
         {
@@ -209,20 +219,7 @@ class LinearConstraints
                    << ") vs. " << this->b.size() << std::endl;
                 throw std::invalid_argument(ss.str());
             }
-
-            // Update internal quadratic program with given matrix and vector
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i, j));
-                this->nearest_L2.set_b(i, this->b(i));
-            }
-            for (unsigned i = 0; i < this->D; ++i)
-            {
-                this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c(i, 0.0);
-            }
-            this->nearest_L2.set_c0(0.0);
+            this->__updateNearestL2(); 
         }
 
         /**
@@ -248,7 +245,8 @@ class LinearConstraints
          * @param A Left-hand matrix in the constraints. 
          * @param b Right-hand matrix in the constraints. 
          */
-        void setAb(const Ref<const MatrixXd>& A, const Ref<const VectorXd>& b)
+        void setAb(const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
+                   const Ref<const Matrix<T, Dynamic, 1> >& b)
         {
             this->A = A;
             this->b = b;
@@ -262,20 +260,7 @@ class LinearConstraints
                    << ") vs. " << this->b.size() << std::endl;
                 throw std::invalid_argument(ss.str());
             }
-
-            // Update internal quadratic program with given matrix and vector
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, this->A(i, j));
-                this->nearest_L2.set_b(i, this->b(i));
-            }
-            for (unsigned i = 0; i < this->D; ++i)
-            {
-                this->nearest_L2.set_d(i, i, 2.0);
-                this->nearest_L2.set_c(i, 0.0);
-            }
-            this->nearest_L2.set_c0(0.0);
+            this->__updateNearestL2(); 
         }
 
         /**
@@ -312,7 +297,7 @@ class LinearConstraints
         /**
          * Return `this->A`.
          */
-        MatrixXd getA()
+        Matrix<T, Dynamic, Dynamic> getA()
         {
             return this->A;
         }
@@ -320,7 +305,7 @@ class LinearConstraints
         /**
          * Return `this->b`.
          */
-        VectorXd getb()
+        Matrix<T, Dynamic, 1> getb()
         {
             return this->b;
         }
@@ -348,7 +333,7 @@ class LinearConstraints
          * @param x Query vector.
          * @returns True if `this->A * x <=/>= this->b`, false otherwise.  
          */
-        bool query(const Ref<const VectorXd>& x)
+        bool query(const Ref<const Matrix<T, Dynamic, 1> >& x)
         {
             if (x.size() != this->D)
             {
@@ -389,7 +374,7 @@ class LinearConstraints
          * @param x Query vector.
          * @returns Boolean vector indicating which constraints are active. 
          */
-        Matrix<bool, Dynamic, 1> active(const Ref<const VectorXd>& x)
+        Matrix<bool, Dynamic, 1> active(const Ref<const Matrix<T, Dynamic, 1> >& x)
         {
             if (x.size() != this->D)
             {
@@ -406,17 +391,22 @@ class LinearConstraints
          * Return the nearest point to the given query vector, with respect 
          * to L2 (Euclidean) distance, that satisfies the constraints.
          *
+         * Note that, while the returned vector has scalar type `T`, the 
+         * nearest-point quadratic program is solved with double-precision
+         * arithmetic, meaning that the returned vector may be slightly
+         * inaccurate. 
+         *
          * @param x Query vector. 
          * @returns Vector nearest to query that satisfies the constraints.  
          */
-        VectorXd nearestL2(const Ref<const VectorXd>& x)
+        Matrix<T, Dynamic, 1> nearestL2(const Ref<const Matrix<T, Dynamic, 1> >& x)
         {
             // First check that x itself satisfies the constraints
             if (this->query(x)) return x;
 
             // Otherwise, solve the quadratic program for the nearest point to x
             for (unsigned i = 0; i < this->D; ++i)
-                this->nearest_L2.set_c(i, -2.0 * x(i));
+                this->nearest_L2.set_c(i, -2.0 * static_cast<double>(x(i)));
             Solution solution = CGAL::solve_quadratic_program(this->nearest_L2, ET());
             if (solution.is_infeasible())
                 throw std::runtime_error("Quadratic program is infeasible");
@@ -425,12 +415,12 @@ class LinearConstraints
             else if (!solution.is_optimal())
                 throw std::runtime_error("Failed to compute optimal solution");
 
-            // Collect the values of the solution into a VectorXd
-            VectorXd y = VectorXd::Zero(this->D);
+            // Collect the values of the solution with the desired scalar type
+            Matrix<T, Dynamic, 1> y = Matrix<T, Dynamic, 1>::Zero(this->D);
             unsigned i = 0;
             for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
             {
-                y(i) = CGAL::to_double(*it);
+                y(i) = static_cast<T>(CGAL::to_double(*it));
                 i++;
             }
             return y;
@@ -440,13 +430,18 @@ class LinearConstraints
          * Return the solution to the given linear program, with the feasible 
          * region given by the stored constraints (`this->A * x <=/>= this->b`).
          *
-         * The linear program seeks to *minimize* the given objective function. 
+         * The linear program seeks to *minimize* the given objective function.
+         *
+         * Note that, while the returned vector has scalar type `T`, the 
+         * linear program is solved with double-precision arithmetic, meaning
+         * that the returned vector may be slightly inaccurate. 
          *
          * @param obj Vector of length `this->D` encoding the objective function.
          * @param c0  Constant term of the objective function.
          * @returns   Vector solution to the given linear program.  
          */
-        VectorXd solveLinearProgram(const Ref<const VectorXd>& obj, const double c0)
+        Matrix<T, Dynamic, 1> solveLinearProgram(const Ref<const Matrix<T, Dynamic, 1> >& obj,
+                                                 const T c0)
         {
             // Instantiate the linear program ... 
             Program program(
@@ -456,12 +451,12 @@ class LinearConstraints
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i, this->A(i, j));
-                program.set_b(i, this->b(i));
+                    program.set_a(j, i, static_cast<double>(this->A(i, j)));
+                program.set_b(i, static_cast<double>(this->b(i)));
             }
             for (unsigned i = 0; i < this->D; ++i)
-                program.set_c(i, obj(i)); 
-            program.set_c0(c0);
+                program.set_c(i, static_cast<double>(obj(i))); 
+            program.set_c0(static_cast<double>(c0));
 
             // ... and (try to) solve it ... 
             Solution solution = CGAL::solve_quadratic_program(program, ET());
@@ -473,11 +468,11 @@ class LinearConstraints
                 throw std::runtime_error("Failed to compute optimal solution");
 
             // ... and return the solution vector
-            VectorXd y = VectorXd::Zero(this->D);
+            Matrix<T, Dynamic, 1> y = Matrix<T, Dynamic, 1>::Zero(this->D);
             unsigned i = 0;
             for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
             {
-                y(i) = CGAL::to_double(*it);
+                y(i) = static_cast<T>(CGAL::to_double(*it));
                 i++;
             }
             return y;
@@ -501,28 +496,28 @@ class LinearConstraints
             for (unsigned i = 0; i < k; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i, this->A(i, j));
-                program.set_b(i, this->b(i));
+                    program.set_a(j, i, static_cast<double>(this->A(i, j)));
+                program.set_b(i, static_cast<double>(this->b(i)));
             }
             for (unsigned i = k + 1; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i - 1, this->A(i, j));
-                program.set_b(i - 1, this->b(i));
+                    program.set_a(j, i - 1, static_cast<double>(this->A(i, j)));
+                program.set_b(i - 1, static_cast<double>(this->b(i)));
             }
             // ... and if the constraints are less-than-or-equal-to, setting
             // the *negative* of the k-th constraint as the objective function ...
             if (this->type == LessThanOrEqualTo)
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program.set_c(i, -this->A(k, i));
+                    program.set_c(i, static_cast<double>(-this->A(k, i)));
             }
             // ... and otherwise setting the k-th constraint as the objective 
             // function ...
             else
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program.set_c(i, this->A(k, i)); 
+                    program.set_c(i, static_cast<double>(this->A(k, i)));  
             } 
             program.set_c0(0);
 
@@ -535,14 +530,22 @@ class LinearConstraints
 
             // If the solution is feasible, then check that the solution satisfies
             // the excised constraint
-            VectorXd y = VectorXd::Zero(this->D);
+            Matrix<T, Dynamic, 1> y = Matrix<T, Dynamic, 1>::Zero(this->D);
             unsigned i = 0;
             for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
             {
-                y(i) = CGAL::to_double(*it);
+                y(i) = static_cast<T>(CGAL::to_double(*it));
                 i++;
             }
-            return (this->A.row(k) * y >= this->b(k)); 
+
+            // The explicit evaluations below are included because Eigen does
+            // not know how to deal with every expression template for every
+            // scalar type (especially Boost.Multiprecision types)
+            T value = this->A.row(k) * y; 
+            if (this->type == GreaterThanOrEqualTo)
+                return (value >= this->b(k));
+            else
+                return (value <= this->b(k)); 
         }
 
         /**
