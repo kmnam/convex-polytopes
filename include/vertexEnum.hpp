@@ -56,6 +56,24 @@ class PrimalInfeasibleException  : public std::runtime_error
         PrimalInfeasibleException(const std::string& what = "")  : std::runtime_error(what) {}
 };
 /**
+ * Exception to be thrown when a dictionary is primal feasible when it should 
+ * not be (e.g., when applying dual Bland's rule). 
+ */
+class PrimalFeasibleException    : public std::runtime_error
+{
+    public:
+        PrimalFeasibleException(const std::string& what = "")    : std::runtime_error(what) {}
+};
+/**
+ * Exception to be thrown when a dictionary is dual infeasible when it should
+ * not be (e.g., when applying dual Bland's rule). 
+ */
+class DualInfeasibleException    : public std::runtime_error
+{
+    public:
+        DualInfeasibleException(const std::string& what = "")    : std::runtime_error(what) {}
+};
+/**
  * Exception to be thrown when a dictionary is dual feasible when it should 
  * not be (e.g., when applying Bland's rule). 
  */ 
@@ -352,125 +370,6 @@ class PolyhedralDictionarySystem : public LinearConstraints<mpq_rational>
             return std::make_pair(new_i, new_j);  
         }
 
-        /**
-         * Determine if the given pivot is a reverse Bland pivot.
-         *
-         * @param j Position of basis variable in the current basis. 
-         * @param i Position of cobasis variable in the current cobasis. 
-         * @returns True if the pivot is a reverse Bland pivot, false otherwise.
-         * @throws InvalidPivotException If the reverse pivot cannot be performed
-         *                               or reversed.
-         * @throws PrimalInfeasibleException If the Bland pivot of the newly
-         *                                   obtained dictionary is not defined
-         *                                   due to primal infeasibility.
-         * @throws DualFeasibleException If the Bland pivot of the newly obtained
-         *                               dictionary is not defined due to dual
-         *                               feasibility. 
-         */
-        bool isReverseBlandPivot(const int j, const int i) 
-        {
-            // Perform the reverse pivot
-            //
-            // this->basis(j) is sent to the cobasis and becomes this->cobasis(new_i)
-            // this->cobasis(i) is sent to the basis and becomes this->basis(new_j)
-            //
-            // If the reverse pivot could not be performed, then simply return false 
-            int new_j, new_i;
-            try
-            { 
-                std::tie(new_j, new_i) = this->__pivot(j, i);
-            }
-            catch (const InvalidPivotException& e)
-            {
-                throw; 
-            }
-
-            // Now find the pivot corresponding to Bland's rule for this 
-            // new dictionary 
-            int bland_i, bland_j;
-            try
-            { 
-                std::tie(bland_i, bland_j) = this->findBland();
-            }
-            catch (const PrimalInfeasibleException& e) 
-            {
-                throw; 
-            }
-            catch (const DualFeasibleException& e)
-            {
-                throw; 
-            }
-
-            // Reverse the reverse pivot to obtain the original dictionary 
-            try
-            { 
-                this->__pivot(new_j, new_i);
-            }
-            catch (const InvalidPivotException& e)
-            {
-                throw; 
-            }
-
-            // Is this reverse of the reverse pivot the same as the Bland pivot? 
-            return (new_j == bland_i && new_i == bland_j);  
-        }
-
-        /**
-         * Determine if the given pivot is a reverse criss-cross pivot.
-         *
-         * @param j Position of basis variable in the current basis. 
-         * @param i Position of cobasis variable in the current cobasis. 
-         * @returns True if the pivot is a reverse criss-cross pivot, false
-         *          otherwise.
-         * @throws InvalidPivotException If the reverse pivot cannot be performed
-         *                               or reversed.
-         * @throws OptimalDictionaryException If the criss-cross pivot of the newly
-         *                                    obtained dictionary is not defined
-         *                                    due to optimality. 
-         */
-        bool isReverseCrissCrossPivot(const int j, const int i)
-        {
-            // Perform the reverse pivot
-            //
-            // this->basis(j) is sent to the cobasis and becomes this->cobasis(new_i)
-            // this->cobasis(i) is sent to the basis and becomes this->basis(new_j)
-            //
-            // If the reverse pivot could not be performed, then simply return false 
-            int new_j, new_i;
-            try
-            { 
-                std::tie(new_j, new_i) = this->__pivot(j, i);
-            }
-            catch (const InvalidPivotException& e)
-            {
-                throw; 
-            }
-
-            // Now find the criss-cross pivot for this new dictionary
-            int cc_i, cc_j; 
-            try
-            { 
-                std::tie(cc_i, cc_j) = this->findCrissCross(); 
-            }
-            catch (const OptimalDictionaryException& e) 
-            {
-                throw; 
-            }
-
-            // Reverse the reverse pivot to obtain the original dictionary 
-            try
-            { 
-                this->__pivot(new_j, new_i);
-            }
-            catch (const InvalidPivotException& e)
-            {
-                throw; 
-            }
-
-            // Is this reverse of the reverse pivot the same as the criss-cross pivot? 
-            return (new_j == cc_i && new_i == cc_j); 
-        }
-
     public:
         /**
          * Trivial constructor that specifies only the inequality type.
@@ -645,6 +544,33 @@ class PolyhedralDictionarySystem : public LinearConstraints<mpq_rational>
         }
 
         /**
+         * Return the vertex associated with the current basic solution, given
+         * that the current dictionary is primal feasible. 
+         *
+         * If the current dictionary is primal infeasible, then an exception
+         * is thrown. 
+         *
+         * @returns Vertex associated with the current basic solution.
+         * @throws  PrimalInfeasibleException If the current dictionary is 
+         *                                    primal infeasible.  
+         */
+        VectorXr getVertex()
+        {
+            // Check that each basis variable is primal feasible 
+            for (int i = 1; i <= this->N; ++i)
+            {
+                if (!this->isPrimalFeasible(i))
+                {
+                    throw PrimalInfeasibleException(
+                        "No vertex associated with primal infeasible dictionary"
+                    ); 
+                }
+            }
+
+            return this->basic_solution.tail(this->D); 
+        }
+
+        /**
          * Perform the given pivot between `this->basis(i)` and `this->cobasis(j)`
          *
          * @param i Position of basis variable in the current basis. 
@@ -778,14 +704,14 @@ class PolyhedralDictionarySystem : public LinearConstraints<mpq_rational>
                 } 
             }
 
-            // If no such index exists, then return [-1, -1]
+            // If no such index exists, then throw an exception
             if (j == -1)
                 throw DualFeasibleException(
                     "Bland's rule cannot be performed on dual feasible dictionary"
                 ); 
 
             // Find the least index in the basis (other than 0) obtaining the
-            // minimum value of -(dict_coefs(i, N+D+1) / dict_coefs(i, s))
+            // minimum value of -(dict_coefs(i, N+D+1) / dict_coefs(i, j))
             int i = -1;
             mpq_rational lambda = std::numeric_limits<mpq_rational>::max(); 
             for (int k = 1; k <= this->N; ++k)
@@ -836,7 +762,119 @@ class PolyhedralDictionarySystem : public LinearConstraints<mpq_rational>
                 throw; 
             }
 
-            // Perform the pivot only if it is actually allowed 
+            // Perform the pivot only if it is actually allowed (here, the 
+            // pivot should always be allowed)
+            try
+            {
+                return this->__pivot(i, j);
+            }
+            catch (const InvalidPivotException& e)
+            {
+                throw; 
+            }
+        }
+
+        /**
+         * Find the pivot determined by dual Bland's rule on the current
+         * dictionary and return the indices being switched.
+         * 
+         * @returns The basis position (`k` if basis index is `this->basis(k)`)
+         *          and cobasis position (`k` if cobasis index is `this->cobasis(k)`)
+         *          being switched by the dual Bland pivot. 
+         * @throws DualInfeasibleException If the current dictionary is dual
+         *                                 infeasible.
+         * @throws PrimalFeasibleException If the current dictionary is primal
+         *                                 feasible.
+         */
+        std::pair<int, int> findDualBland()
+        {
+            // Check whether the dictionary is dual feasible 
+            for (int k = 0; k < this->D; ++k)
+            {
+                if (!this->isDualFeasible(k))
+                {
+                    throw DualInfeasibleException(
+                        "Dual Bland's rule cannot be performed on dual infeasible "
+                        "dictionary"
+                    ); 
+                }
+            } 
+
+            // Find the least index in the basis such that the corresponding
+            // variable is primal infeasible 
+            int i = -1;
+            for (int k = 1; k <= this->N; ++k)
+            {
+                if (!this->isPrimalFeasible(k))
+                {
+                    i = k;
+                    break; 
+                } 
+            }
+
+            // If no such index exists, then throw an exception
+            if (i == -1)
+                throw PrimalFeasibleException(
+                    "Dual Bland's rule cannot be performed on dual feasible "
+                    "dictionary"
+                ); 
+
+            // Find the least index in the cobasis (other than N+D+1) obtaining
+            // the minimum value of -(dict_coefs(0, j) / dict_coefs(i, j)) 
+            int j = -1;
+            mpq_rational lambda = std::numeric_limits<mpq_rational>::max(); 
+            for (int k = 0; k < this->D; ++k)
+            {
+                mpq_rational denom = this->dict_coefs(i, k); 
+                if (denom < 0)
+                {
+                    mpq_rational value = -this->dict_coefs(0, k) / denom; 
+                    if (lambda > value) 
+                    {
+                        lambda = value;
+                        j = k;
+                    }
+                }
+            }
+
+            // Return the chosen indices 
+            return std::make_pair(i, j); 
+        }
+
+        /**
+         * Perform the pivot determined by dual Bland's rule on the current
+         * dictionary.
+         *
+         * @returns The basis position (`k` if basis index is `this->basis(k)`)
+         *          and cobasis position (`k` if cobasis index is `this->cobasis(k)`)
+         *          in the *new* dictionary obtained after the pivot. 
+         * @throws PrimalFeasibleException If the current dictionary is primal
+         *                                 feasible (rethrown exception from
+         *                                 `findDualBland()`).
+         * @throws DualInfeasibleException If the current dictionary is dual
+         *                                 infeasible (rethrown exception from
+         *                                 `findDualBland()`).
+         * @throws InvalidPivotException If the pivot could not be performed 
+         *                               (rethrown exception from `__pivot()`). 
+         */
+        std::pair<int, int> pivotDualBland()
+        {
+            int i, j; 
+            try
+            { 
+                std::tie(i, j) = this->findDualBland();
+            }
+            catch (const PrimalFeasibleException& e)
+            {
+                throw; 
+            }
+            catch (const DualInfeasibleException& e)
+            {
+                throw; 
+            }
+
+            // Perform the pivot only if it is actually allowed (here, the 
+            // pivot should always be allowed)
             try
             {
                 return this->__pivot(i, j);
@@ -960,6 +998,125 @@ class PolyhedralDictionarySystem : public LinearConstraints<mpq_rational>
             {
                 throw; 
             }
+        }
+
+        /**
+         * Determine if the given pivot is a reverse Bland pivot.
+         *
+         * @param j Position of basis variable in the current basis. 
+         * @param i Position of cobasis variable in the current cobasis. 
+         * @returns True if the pivot is a reverse Bland pivot, false otherwise.
+         * @throws InvalidPivotException If the reverse pivot cannot be performed
+         *                               or reversed.
+         * @throws PrimalInfeasibleException If the Bland pivot of the newly
+         *                                   obtained dictionary is not defined
+         *                                   due to primal infeasibility.
+         * @throws DualFeasibleException If the Bland pivot of the newly obtained
+         *                               dictionary is not defined due to dual
+         *                               feasibility. 
+         */
+        bool isReverseBlandPivot(const int j, const int i) 
+        {
+            // Perform the reverse pivot
+            //
+            // this->basis(j) is sent to the cobasis and becomes this->cobasis(new_i)
+            // this->cobasis(i) is sent to the basis and becomes this->basis(new_j)
+            //
+            // If the reverse pivot could not be performed, then simply return false 
+            int new_j, new_i;
+            try
+            { 
+                std::tie(new_j, new_i) = this->__pivot(j, i);
+            }
+            catch (const InvalidPivotException& e)
+            {
+                throw; 
+            }
+
+            // Now find the pivot corresponding to Bland's rule for this 
+            // new dictionary 
+            int bland_i, bland_j;
+            try
+            { 
+                std::tie(bland_i, bland_j) = this->findBland();
+            }
+            catch (const PrimalInfeasibleException& e) 
+            {
+                throw; 
+            }
+            catch (const DualFeasibleException& e)
+            {
+                throw; 
+            }
+
+            // Reverse the reverse pivot to obtain the original dictionary 
+            try
+            { 
+                this->__pivot(new_j, new_i);
+            }
+            catch (const InvalidPivotException& e)
+            {
+                throw; 
+            }
+
+            // Is this reverse of the reverse pivot the same as the Bland pivot? 
+            return (new_j == bland_i && new_i == bland_j);  
+        }
+
+        /**
+         * Determine if the given pivot is a reverse criss-cross pivot.
+         *
+         * @param j Position of basis variable in the current basis. 
+         * @param i Position of cobasis variable in the current cobasis. 
+         * @returns True if the pivot is a reverse criss-cross pivot, false
+         *          otherwise.
+         * @throws InvalidPivotException If the reverse pivot cannot be performed
+         *                               or reversed.
+         * @throws OptimalDictionaryException If the criss-cross pivot of the newly
+         *                                    obtained dictionary is not defined
+         *                                    due to optimality. 
+         */
+        bool isReverseCrissCrossPivot(const int j, const int i)
+        {
+            // Perform the reverse pivot
+            //
+            // this->basis(j) is sent to the cobasis and becomes this->cobasis(new_i)
+            // this->cobasis(i) is sent to the basis and becomes this->basis(new_j)
+            //
+            // If the reverse pivot could not be performed, then simply return false 
+            int new_j, new_i;
+            try
+            { 
+                std::tie(new_j, new_i) = this->__pivot(j, i);
+            }
+            catch (const InvalidPivotException& e)
+            {
+                throw; 
+            }
+
+            // Now find the criss-cross pivot for this new dictionary
+            int cc_i, cc_j; 
+            try
+            { 
+                std::tie(cc_i, cc_j) = this->findCrissCross(); 
+            }
+            catch (const OptimalDictionaryException& e) 
+            {
+                throw; 
+            }
+
+            // Reverse the reverse pivot to obtain the original dictionary 
+            try
+            { 
+                this->__pivot(new_j, new_i);
+            }
+            catch (const InvalidPivotException& e)
+            {
+                throw; 
+            }
+
+            // Is this reverse of the reverse pivot the same as the criss-cross pivot? 
+            return (new_j == cc_i && new_i == cc_j); 
         }
 
         /**
