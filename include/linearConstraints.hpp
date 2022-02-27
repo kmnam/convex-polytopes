@@ -34,6 +34,16 @@ enum InequalityType
     IsEqualTo
 };
 
+CGAL::Comparison_result cgalInequalityType(const InequalityType type)
+{
+    if (type == LessThanOrEqualTo)
+        return CGAL::SMALLER; 
+    else if (type == GreaterThanOrEqualTo)
+        return CGAL::LARGER; 
+    else 
+        return CGAL::EQUAL; 
+}
+
 /**
  * A class that implements a set of linear constraints among a set of
  * variables, `A * x <=/==/>= b`.
@@ -61,6 +71,7 @@ class LinearConstraints
                 for (unsigned j = 0; j < this->D; ++j)
                     this->nearest_L2.set_a(j, i, static_cast<double>(this->A(i, j)));
                 this->nearest_L2.set_b(i, static_cast<double>(this->b(i)));
+                this->nearest_L2.set_r(i, cgalInequalityType(this->type)); 
             }
             for (unsigned i = 0; i < this->D; ++i)
             {
@@ -142,19 +153,13 @@ class LinearConstraints
          * @param type Inequality type. 
          */
         LinearConstraints(const InequalityType type)
-            : nearest_L2(CGAL::SMALLER, false, 0.0, false, 0.0) 
+            : nearest_L2(cgalInequalityType(type), false, 0.0, false, 0.0) 
         {
             this->type = type; 
             this->N = 0;
             this->D = 0;
             this->A = Matrix<T, Dynamic, Dynamic>::Zero(0, 0);
             this->b = Matrix<T, Dynamic, 1>::Zero(0);
-            if (this->type == LessThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::SMALLER); 
-            else if (this->type == GreaterThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::LARGER); 
-            else
-                this->nearest_L2.set_r(CGAL::EQUAL); 
         }
 
         /**
@@ -168,7 +173,7 @@ class LinearConstraints
          */
         LinearConstraints(const InequalityType type, const int D, const T lower,
                           const T upper)
-            : nearest_L2(CGAL::SMALLER, false, 0.0, false, 0.0)  
+            : nearest_L2(cgalInequalityType(type), false, 0.0, false, 0.0)  
         {
             // Each variable has two constraints, one specifying a lower bound
             // and another specifying an upper bound
@@ -197,12 +202,6 @@ class LinearConstraints
                 }
             }
             this->updateNearestL2();
-            if (this->type == LessThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::SMALLER); 
-            else if (this->type == GreaterThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::LARGER); 
-            else
-                this->nearest_L2.set_r(CGAL::EQUAL); 
         } 
 
         /**
@@ -214,7 +213,7 @@ class LinearConstraints
          */
         LinearConstraints(const InequalityType type, const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
                           const Ref<const Matrix<T, Dynamic, 1> >& b)
-            : nearest_L2(CGAL::SMALLER, false, 0.0, false, 0.0) 
+            : nearest_L2(cgalInequalityType(type), false, 0.0, false, 0.0) 
         {
             this->type = type; 
             this->A = A;
@@ -230,12 +229,6 @@ class LinearConstraints
                 throw std::invalid_argument(ss.str());
             }
             this->updateNearestL2();
-            if (this->type == LessThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::SMALLER); 
-            else if (this->type == GreaterThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::LARGER); 
-            else
-                this->nearest_L2.set_r(CGAL::EQUAL); 
         }
 
         /**
@@ -253,12 +246,7 @@ class LinearConstraints
         void setInequalityType(const InequalityType type)
         {
             this->type = type;
-            if (this->type == LessThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::SMALLER); 
-            else if (this->type == GreaterThanOrEqualTo)
-                this->nearest_L2.set_r(CGAL::LARGER); 
-            else
-                this->nearest_L2.set_r(CGAL::EQUAL); 
+            this->updateNearestL2(); 
         }
 
         /**
@@ -474,16 +462,11 @@ class LinearConstraints
                 for (unsigned j = 0; j < this->D; ++j)
                     program.set_a(j, i, static_cast<double>(this->A(i, j)));
                 program.set_b(i, static_cast<double>(this->b(i)));
+                program.set_r(i, cgalInequalityType(this->type)); 
             }
             for (unsigned i = 0; i < this->D; ++i)
                 program.set_c(i, static_cast<double>(obj(i))); 
             program.set_c0(static_cast<double>(c0));
-            if (this->type == LessThanOrEqualTo)
-                program.set_r(CGAL::SMALLER); 
-            else if (this->type == GreaterThanOrEqualTo)
-                program.set_r(CGAL::LARGER); 
-            else
-                program.set_r(CGAL::EQUAL); 
 
             // ... and (try to) solve it ... 
             Solution solution = CGAL::solve_quadratic_program(program, ET());
@@ -534,7 +517,6 @@ class LinearConstraints
             // the *negative* of the k-th constraint as the objective function ...
             if (this->type == LessThanOrEqualTo)
             {
-                program.set_r(CGAL::SMALLER); 
                 for (unsigned i = 0; i < this->D; ++i)
                     program.set_c(i, static_cast<double>(-this->A(k, i)));
             }
@@ -542,10 +524,6 @@ class LinearConstraints
             // function ...
             else
             {
-                if (this->type == GreaterThanOrEqualTo)
-                    program.set_r(CGAL::LARGER); 
-                else 
-                    program.set_r(CGAL::EQUAL); 
                 for (unsigned i = 0; i < this->D; ++i)
                     program.set_c(i, static_cast<double>(this->A(k, i)));  
             } 
