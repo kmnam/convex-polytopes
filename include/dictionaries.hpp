@@ -225,7 +225,7 @@ class DictionarySystem
         void updateBasis()
         {
             int b = 0; 
-            int c = 0; 
+            int c = 0;
             for (int k = 0; k < this->cols; ++k) 
             {
                 if (this->in_basis(k))
@@ -272,7 +272,7 @@ class DictionarySystem
          */
         void updateBasicSolution()
         {
-            VectorXr v = VectorXr::Zero(this->cols); 
+            VectorXr v = VectorXr::Zero(this->cols - this->rows); 
             v(this->gi) = 1; 
             this->basic_solution = this->dict_coefs * v;
             this->is_degenerate = (this->basic_solution.array() == 0).any();  
@@ -296,7 +296,7 @@ class DictionarySystem
             // consists of (this->rows) distinct indices
             if (basis.size() != this->rows)
                 throw std::invalid_argument("Invalid basis specified"); 
-            std::unordered_set indices; 
+            std::unordered_set<int> indices; 
             for (int i = 0; i < this->rows; ++i)
             {
                 if (basis(i) < 0 || basis(i) >= this->cols || basis(i) == this->g)
@@ -386,6 +386,27 @@ class DictionarySystem
 
     public:
         /**
+         * Empty constructor. 
+         */
+        DictionarySystem()
+        {
+            // Assume 2 columns and 1 row at the very least 
+            this->rows = 1; 
+            this->cols = 2;
+            this->f = 0;
+            this->g = 1;
+            this->fi = 0; 
+            this->gi = 0;
+            this->in_basis = VectorXb::Zero(2); 
+            this->in_basis(0) = true;
+            this->basis.resize(1); 
+            this->cobasis.resize(1);  
+            this->updateBasis(); 
+            this->updateDictCoefs(); 
+            this->updateBasicSolution(); 
+        }
+
+        /**
          * Constructor specifying the core system, with:
          * - `this->f` set to 0,
          * - `this->g` set to `this->cols - 1`, and
@@ -400,9 +421,11 @@ class DictionarySystem
             this->cols = A.cols();
             this->f = 0;
             this->g = this->cols - 1; 
-            this->in_basis = VectorXi::Zeros(this->cols); 
+            this->in_basis = VectorXb::Zero(this->cols);
             for (int i = 0; i < this->rows; ++i)
                 this->in_basis(i) = true;
+            this->basis.resize(this->rows); 
+            this->cobasis.resize(this->cols - this->rows);  
             this->updateBasis(); 
             this->updateDictCoefs();
             this->updateBasicSolution(); 
@@ -435,7 +458,7 @@ class DictionarySystem
 
             // Initialize the basis to f plus the first (this->rows - 1) 
             // non-fixed indices in the system  
-            this->in_basis = VectorXi::Zeros(this->cols);
+            this->in_basis = VectorXb::Zero(this->cols);
             this->in_basis(f) = true;  
             int i = 0; 
             int n = 1; 
@@ -448,6 +471,8 @@ class DictionarySystem
                 }
                 i++; 
             }
+            this->basis.resize(this->rows); 
+            this->cobasis.resize(this->cols - this->rows);  
             this->updateBasis(); 
             this->updateDictCoefs();
             this->updateBasicSolution(); 
@@ -481,6 +506,9 @@ class DictionarySystem
             this->g = g;
 
             // Set the basis to the given indices
+            this->in_basis.resize(this->cols); 
+            this->basis.resize(this->rows); 
+            this->cobasis.resize(this->cols - this->rows);  
             this->__setBasis(basis);  
         } 
 
@@ -929,7 +957,7 @@ class DictionarySystem
             bool ith_var_in_basis; 
             for (int k = 0; k < this->cols; ++k)
             {
-                if (k != this->fi && this->in_basis(k))        // Is a basis variable other than f
+                if (this->in_basis(k) && k != this->f)        // Is a basis variable other than f
                 {
                     if (!this->isPrimalFeasible(b))
                     {
@@ -939,11 +967,11 @@ class DictionarySystem
                     } 
                     b++; 
                 }
-                else if (k == this->fi)
+                else if (k == this->f)
                 {
                     b++; 
                 }
-                else if (k != this->gi && !this->in_basis(k))  // Is a cobasis variable other than g
+                else if (!this->in_basis(k) && k != this->g)  // Is a cobasis variable other than g
                 {
                     if (!this->isDualFeasible(c))
                     {
