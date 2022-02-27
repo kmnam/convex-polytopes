@@ -23,7 +23,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/26/2022
+ *     2/27/2022
  */
 using namespace Eigen;
 using boost::multiprecision::number; 
@@ -760,7 +760,7 @@ class DictionarySystem
             // Find the least index in the basis (other than f) obtaining the
             // minimum value of -(dict_coefs(i, g) / dict_coefs(i, j))
             int i = -1;
-            mpq_rational lambda = std::numeric_limits<mpq_rational>::max(); 
+            mpq_rational lambda = static_cast<mpq_rational>(std::numeric_limits<int>::max()); 
             for (int k = 0; k < this->rows; ++k)
             {
                 if (k != this->fi)
@@ -872,7 +872,7 @@ class DictionarySystem
             // Find the least index in the cobasis (other than g) obtaining
             // the minimum value of -(dict_coefs(f, j) / dict_coefs(i, j)) 
             int j = -1;
-            mpq_rational lambda = std::numeric_limits<mpq_rational>::max(); 
+            mpq_rational lambda = static_cast<mpq_rational>(std::numeric_limits<int>::max()); 
             for (int k = 0; k < this->cols - this->rows; ++k)
             {
                 if (k != this->gi)
@@ -954,7 +954,7 @@ class DictionarySystem
             int i = -1;
             int b = 0; 
             int c = 0;
-            bool ith_var_in_basis; 
+            bool ith_var_in_basis = false; 
             for (int k = 0; k < this->cols; ++k)
             {
                 if (this->in_basis(k) && k != this->f)        // Is a basis variable other than f
@@ -1061,12 +1061,6 @@ class DictionarySystem
          * @returns True if the pivot is a reverse Bland pivot, false otherwise.
          * @throws InvalidPivotException If the reverse pivot cannot be performed
          *                               or reversed.
-         * @throws PrimalInfeasibleException If the Bland pivot of the newly
-         *                                   obtained dictionary is not defined
-         *                                   due to primal infeasibility.
-         * @throws DualFeasibleException If the Bland pivot of the newly obtained
-         *                               dictionary is not defined due to dual
-         *                               feasibility. 
          */
         bool isReverseBlandPivot(const int j, const int i) 
         {
@@ -1095,11 +1089,11 @@ class DictionarySystem
             }
             catch (const PrimalInfeasibleException& e) 
             {
-                throw; 
+                bland_i = -1; 
             }
             catch (const DualFeasibleException& e)
             {
-                throw; 
+                bland_i = -1; 
             }
 
             // Reverse the reverse pivot to obtain the original dictionary 
@@ -1113,7 +1107,7 @@ class DictionarySystem
             }
 
             // Is this reverse of the reverse pivot the same as the Bland pivot? 
-            return (new_j == bland_i && new_i == bland_j);  
+            return (bland_i != -1 && new_j == bland_i && new_i == bland_j);  
         }
 
         /**
@@ -1125,12 +1119,6 @@ class DictionarySystem
          *          otherwise.
          * @throws InvalidPivotException If the reverse pivot cannot be performed
          *                               or reversed.
-         * @throws PrimalFeasibleException If the dual Bland pivot of the newly
-         *                                 obtained dictionary is not defined
-         *                                 due to primal feasibility.
-         * @throws DualInfeasibleException If the dual Bland pivot of the newly
-         *                                 obtained dictionary is not defined due
-         *                                 to dual infeasibility. 
          */
         bool isReverseDualBlandPivot(const int j, const int i) 
         {
@@ -1159,11 +1147,11 @@ class DictionarySystem
             }
             catch (const PrimalFeasibleException& e) 
             {
-                throw; 
+                dbland_i = -1; 
             }
             catch (const DualInfeasibleException& e)
             {
-                throw; 
+                dbland_i = -1;
             }
 
             // Reverse the reverse pivot to obtain the original dictionary 
@@ -1178,7 +1166,7 @@ class DictionarySystem
 
             // Is this reverse of the reverse pivot the same as the dual Bland
             // pivot? 
-            return (new_j == dbland_i && new_i == dbland_j);  
+            return (dbland_i != -1 && new_j == dbland_i && new_i == dbland_j);  
         }
 
         /**
@@ -1190,9 +1178,6 @@ class DictionarySystem
          *          otherwise.
          * @throws InvalidPivotException If the reverse pivot cannot be performed
          *                               or reversed.
-         * @throws OptimalDictionaryException If the criss-cross pivot of the newly
-         *                                    obtained dictionary is not defined
-         *                                    due to optimality. 
          */
         bool isReverseCrissCrossPivot(const int j, const int i)
         {
@@ -1220,7 +1205,7 @@ class DictionarySystem
             }
             catch (const OptimalDictionaryException& e) 
             {
-                throw; 
+                cc_i = -1;  
             }
 
             // Reverse the reverse pivot to obtain the original dictionary 
@@ -1234,7 +1219,7 @@ class DictionarySystem
             }
 
             // Is this reverse of the reverse pivot the same as the criss-cross pivot? 
-            return (new_j == cc_i && new_i == cc_j); 
+            return (cc_i != -1 && new_j == cc_i && new_i == cc_j); 
         }
 }; 
 

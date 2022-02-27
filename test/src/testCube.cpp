@@ -1,7 +1,6 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <boost/random.hpp>
-#include "../../include/polytopes.hpp"
 #include "../../include/vertexEnum.hpp"
 
 /**
@@ -11,7 +10,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/26/2022
+ *     2/27/2022
  */
 // Instantiate random number generator 
 boost::random::mt19937 rng(1234567890);
@@ -22,7 +21,9 @@ boost::random::mt19937 rng(1234567890);
  */
 Polytopes::PolyhedralDictionarySystem* TEST_MODULE_PARSE()
 {
-    Polytopes::PolyhedralDictionarySystem* poly = new Polytopes::PolyhedralDictionarySystem(Polytopes::InequalityType::LessThanOrEqualTo);
+    Polytopes::PolyhedralDictionarySystem* poly = new Polytopes::PolyhedralDictionarySystem(
+        Polytopes::InequalityType::LessThanOrEqualTo
+    );
     poly->parse("cube.poly");
 
     // Check the linear constraints themselves 
@@ -54,7 +55,7 @@ Polytopes::PolyhedralDictionarySystem* TEST_MODULE_PARSE()
     for (int i = 0; i < 7; ++i)
         assert(basis(i) == i); 
     VectorXi cobasis = poly->getCobasis();
-    assert(basis.size() == 4); 
+    assert(cobasis.size() == 4); 
     for (int i = 0; i < 4; ++i)
         assert(cobasis(i) == 7 + i);  
 
@@ -93,9 +94,9 @@ Polytopes::PolyhedralDictionarySystem* TEST_MODULE_PARSE()
     assert(core_A(6, 10) == 0);
 
     // Check the entries in the initial dictionary matrix 
-    MatrixXr dict_coefs = poly->getDictCoefs(); 
+    MatrixXr dict_coefs = poly->getDictCoefs();
     assert(dict_coefs.rows() == 7); 
-    assert(dict_coefs.rows() == 4); 
+    assert(dict_coefs.cols() == 4); 
     assert(dict_coefs == -core_A(Eigen::all, Eigen::seqN(7, 4)));  
 
     return poly;  
@@ -213,10 +214,10 @@ void TEST_MODULE_THREE_PIVOT_ATTEMPTS(Polytopes::PolyhedralDictionarySystem* pol
     assert(basis(4) == 5); 
     assert(basis(5) == 6);
     assert(basis(6) == 9);  
-    cobasis = poly->getCobasis();   // Should be 3, 8, 9, 10
+    cobasis = poly->getCobasis();   // Should be 3, 7, 8, 10
     assert(cobasis(0) == 3);
-    assert(cobasis(1) == 8); 
-    assert(cobasis(2) == 9); 
+    assert(cobasis(1) == 7); 
+    assert(cobasis(2) == 8); 
     assert(cobasis(3) == 10);
 
     // Check that the new dictionary coefficient matrix is correct
@@ -262,8 +263,8 @@ void TEST_MODULE_THREE_PIVOT_ATTEMPTS(Polytopes::PolyhedralDictionarySystem* pol
 
     // Reverse the pivot
     std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
-    assert(new_i == 1); 
-    assert(new_j == 0); 
+    assert(new_i == 3); 
+    assert(new_j == 2); 
     assert(ind == 1);
 }
 
@@ -345,7 +346,7 @@ void TEST_MODULE_SIX_REVERSE_BLAND_PIVOT_CANDIDATES(Polytopes::PolyhedralDiction
     for (int i = 0; i < 3; ++i)
         assert(poly->isDualFeasible(i));     // Check that cobasis(0), ..., cobasis(2) are dual feasible
     for (int i = 1; i <= 6; ++i)
-        assert(poly->isPrimalFeasible(i));   // Check that basis(1), ..., basis(6) are primal feasible  
+        assert(poly->isPrimalFeasible(i));   // Check that basis(1), ..., basis(6) are primal feasible
     assert(ind == 3);
 
     // Try to determine the Bland pivot of the new dictionary -- this should 
@@ -393,7 +394,7 @@ void TEST_MODULE_SIX_REVERSE_BLAND_PIVOT_CANDIDATES(Polytopes::PolyhedralDiction
     {
         exception_caught = true; 
     } 
-    assert(exception_caught); 
+    assert(exception_caught);
     
     // Reverse the pivot ...
     std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
@@ -432,7 +433,7 @@ void TEST_MODULE_SIX_REVERSE_BLAND_PIVOT_CANDIDATES(Polytopes::PolyhedralDiction
     // Reverse the pivot ...
     std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
     assert(new_i == 6); 
-    assert(new_j == 1); 
+    assert(new_j == 1);
     
     // ... and check that the original pivot (from the original optimal dictionary)
     // is *not* a reverse Bland pivot
@@ -456,7 +457,7 @@ void TEST_MODULE_SIX_REVERSE_CRISSCROSS_PIVOT_CANDIDATES(Polytopes::PolyhedralDi
     // Then determine the criss-cross pivot of the new dictionary 
     int cc_i, cc_j; 
     std::tie(cc_i, cc_j) = poly->findCrissCross();
-    assert(cc_i == 2); 
+    assert(cc_i == 3); 
     assert(cc_j == 0);
 
     // Reverse the pivot ... 
@@ -476,7 +477,7 @@ void TEST_MODULE_SIX_REVERSE_CRISSCROSS_PIVOT_CANDIDATES(Polytopes::PolyhedralDi
 
     // Then determine the criss-cross pivot of the new dictionary 
     std::tie(cc_i, cc_j) = poly->findCrissCross();
-    assert(cc_i == 3); 
+    assert(cc_i == 4); 
     assert(cc_j == 0);
 
     // Reverse the pivot ... 
@@ -611,6 +612,85 @@ void TEST_MODULE_SIX_REVERSE_CRISSCROSS_PIVOT_CANDIDATES(Polytopes::PolyhedralDi
     assert(!poly->isReverseCrissCrossPivot(6, 1));
 }
 
+/**
+ * Test that the initial optimal dictionary, along with six other primal
+ * feasible dictionaries obtained through pivoting, all yield vertices of
+ * the unit cube. 
+ */
+void TEST_MODULE_GET_VERTICES(Polytopes::PolyhedralDictionarySystem* poly)
+{
+    VectorXr vertex = poly->getVertex();
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+
+    // --------------------------------------------------------------- //
+    //             PIVOTING 1 (basis(1)) AND 7 (cobasis(0))            //
+    // --------------------------------------------------------------- //
+    int new_i, new_j, ind; 
+    std::tie(new_i, new_j, ind) = poly->pivot(1, 0);
+    vertex = poly->getVertex(); 
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+
+    // Reverse the pivot 
+    std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
+
+    // --------------------------------------------------------------- //
+    //             PIVOTING 3 (basis(3)) AND 9 (cobasis(2))            //
+    // --------------------------------------------------------------- //
+    std::tie(new_i, new_j, ind) = poly->pivot(3, 2);
+    vertex = poly->getVertex(); 
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+    
+    // Reverse the pivot 
+    std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
+
+    // --------------------------------------------------------------- //
+    //             PIVOTING 2 (basis(2)) AND 8 (cobasis(1))            //
+    // --------------------------------------------------------------- //
+    std::tie(new_i, new_j, ind) = poly->pivot(2, 1);
+    vertex = poly->getVertex(); 
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+
+    // Reverse the pivot  
+    std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
+
+    // --------------------------------------------------------------- //
+    //             PIVOTING 4 (basis(4)) AND 7 (cobasis(0))            //
+    // --------------------------------------------------------------- //
+    std::tie(new_i, new_j, ind) = poly->pivot(4, 0);
+    vertex = poly->getVertex(); 
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+
+    // Reverse the pivot
+    std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
+    
+    // --------------------------------------------------------------- //
+    //             PIVOTING 5 (basis(5)) AND 9 (cobasis(2))            //
+    // --------------------------------------------------------------- //
+    std::tie(new_i, new_j, ind) = poly->pivot(5, 2);
+    vertex = poly->getVertex(); 
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+
+    // Reverse the pivot
+    std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
+
+    // --------------------------------------------------------------- //
+    //             PIVOTING 6 (basis(6)) AND 8 (cobasis(1))            //
+    // --------------------------------------------------------------- //
+    std::tie(new_i, new_j, ind) = poly->pivot(6, 1);
+    vertex = poly->getVertex(); 
+    for (int k = 0; k < 3; ++k)
+        assert(vertex(k) == 0 || vertex(k) == 1); 
+
+    // Reverse the pivot
+    std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
+}
+
 int main(int argc, char** argv)
 {
     // Instantiate a polyhedral dictionary system from the unit cube constraints
@@ -620,7 +700,7 @@ int main(int argc, char** argv)
     // Test that three different pivots (two valid and one invalid) are performed
     // correctly 
     TEST_MODULE_THREE_PIVOT_ATTEMPTS(poly);
-    std::cout << "TEST_MODULE_THREE_PIVOTS: all tests passed" << std::endl;
+    std::cout << "TEST_MODULE_THREE_PIVOT_ATTEMPTS: all tests passed" << std::endl;
 
     // Test that six reverse Bland pivot candidates are categorized correctly 
     TEST_MODULE_SIX_REVERSE_BLAND_PIVOT_CANDIDATES(poly); 
@@ -628,7 +708,12 @@ int main(int argc, char** argv)
 
     // Test that six reverse criss-cross pivot candidates are categorized correctly 
     TEST_MODULE_SIX_REVERSE_CRISSCROSS_PIVOT_CANDIDATES(poly); 
-    std::cout << "TEST_MODULE_SIX_REVERSE_CRISSCROSS_PIVOT_CANDIDATES: all tests passed" << std::endl; 
+    std::cout << "TEST_MODULE_SIX_REVERSE_CRISSCROSS_PIVOT_CANDIDATES: all tests passed" << std::endl;
+
+    // Test that seven primal feasible dictionaries (the initial optimal dictionary
+    // plus six others obtained via pivoting) yield vertices of the unit cube
+    TEST_MODULE_GET_VERTICES(poly); 
+    std::cout << "TEST_MODULE_GET_VERTICES: all tests passed" << std::endl; 
     
     delete poly; 
     return 0;
