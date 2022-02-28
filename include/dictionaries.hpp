@@ -1,17 +1,7 @@
-#include <iostream>
-#include <stdexcept>
-#include <vector>
-#include <stack>
-#include <utility>
-#include <unordered_set>
-#include <Eigen/Dense>
-#include <boost/multiprecision/gmp.hpp>
-#include <boost/multiprecision/mpfr.hpp>
-
 /**
- * A basic implementation of a "dictionary system," which constitutes the 
- * machinery underlying Avis & Fukuda's algorithm for vertex enumeration
- * in convex polytopes, from:
+ * A basic implementation of a linear program as a "dictionary system," which
+ * constitutes the machinery underlying Avis & Fukuda's pivoting algorithm for
+ * vertex enumeration in convex polytopes and hyperplane arrangements, from:
  *
  * - Avis & Fukuda, A pivoting algorithm for convex hulls and vertex enumeration
  *   of arrangements and polyhedra, Discrete Comput Geom, 8: 295-313 (1992).
@@ -26,6 +16,19 @@
  * **Last updated:**
  *     2/28/2022
  */
+#ifndef DICTIONARIES_LINEAR_PROGRAM_HPP
+#define DICTIONARIES_LINEAR_PROGRAM_HPP
+
+#include <iostream>
+#include <stdexcept>
+#include <vector>
+#include <stack>
+#include <utility>
+#include <unordered_set>
+#include <Eigen/Dense>
+#include <boost/multiprecision/gmp.hpp>
+#include <boost/multiprecision/mpfr.hpp>
+
 using namespace Eigen;
 using boost::multiprecision::number; 
 using boost::multiprecision::mpq_rational; 
@@ -1408,13 +1411,14 @@ class DictionarySystem
          * which is assumed to be optimal.
          *
          * @returns Array of *primal feasible* bases in the order in which
-         *          they were encountered.
+         *          they were encountered, along with their corresponding 
+         *          basic solutions. 
          * @throws PrimalInfeasibleException If the initial dictionary is 
          *                                   primal infeasible. 
          * @throws DualInfeasibleException   If the initial dictionary is 
          *                                   dual infeasible. 
          */
-        MatrixXi searchFromOptimalDictBland()
+        std::pair<MatrixXi, MatrixXr> searchFromOptimalDictBland()
         {
             // Check that the search begins at an optimal dictionary
             for (int i = 0; i < this->rows; ++i)
@@ -1451,7 +1455,11 @@ class DictionarySystem
             // Initialize array of bases encountered during the search 
             int n = 1; 
             MatrixXi bases(n, this->rows); 
-            bases.row(n-1) = this->basis; 
+            bases.row(n-1) = this->basis;
+
+            // Initialize array of corresponding basic solutions
+            MatrixXr solutions(n, this->rows);
+            solutions.row(n-1) = this->basic_solution;  
 
             // While the stack is non-empty ... 
             while (!pivots.empty())
@@ -1476,7 +1484,9 @@ class DictionarySystem
                 reverses_of_performed_pivots.emplace(std::make_pair(new_i, new_j));
                 n++;
                 bases.conservativeResize(n, this->rows);  
-                bases.row(n-1) = this->basis; 
+                bases.row(n-1) = this->basis;
+                solutions.conservativeResize(n, this->rows); 
+                solutions.row(n-1) = this->basic_solution;  
 
                 // Collect all possible reverse Bland pivots from the current
                 // dictionary
@@ -1502,7 +1512,7 @@ class DictionarySystem
                 this->__pivot(prev.first, prev.second); 
             }
 
-            return bases; 
+            return std::make_pair(bases, solutions); 
         }
 
         /**
@@ -1510,13 +1520,14 @@ class DictionarySystem
          * accessible from the current dictionary via reverse criss-cross pivots,
          * which is assumed to be optimal.
          *
-         * @returns Array of bases in the order in which they were encountered.
+         * @returns Array of bases in the order in which they were encountered,
+         *          together with their corresponding basic solutions. 
          * @throws PrimalInfeasibleException If the initial dictionary is 
          *                                   primal infeasible. 
          * @throws DualInfeasibleException   If the initial dictionary is 
          *                                   dual infeasible. 
          */
-        MatrixXi searchFromOptimalDictCrissCross()
+        std::pair<MatrixXi, MatrixXr> searchFromOptimalDictCrissCross()
         {
             // Check that the search begins at an optimal dictionary
             for (int i = 0; i < this->rows; ++i)
@@ -1554,7 +1565,11 @@ class DictionarySystem
             // Initialize array of bases encountered during the search 
             int n = 1; 
             MatrixXi bases(n, this->rows); 
-            bases.row(n-1) = this->basis; 
+            bases.row(n-1) = this->basis;
+
+            // Initialize array of corresponding basic solutions
+            MatrixXr solutions(n, this->rows);
+            solutions.row(n-1) = this->basic_solution;  
 
             // While the stack is non-empty ... 
             while (!pivots.empty())
@@ -1579,7 +1594,9 @@ class DictionarySystem
                 reverses_of_performed_pivots.emplace(std::make_pair(new_i, new_j));
                 n++;
                 bases.conservativeResize(n, this->rows);  
-                bases.row(n-1) = this->basis; 
+                bases.row(n-1) = this->basis;
+                solutions.conservativeResize(n, this->rows); 
+                solutions.row(n-1) = this->basic_solution;  
 
                 // Collect all possible reverse criss-cross pivots from the 
                 // current dictionary
@@ -1605,8 +1622,10 @@ class DictionarySystem
                 this->__pivot(prev.first, prev.second); 
             }
 
-            return bases; 
+            return std::make_pair(bases, solutions); 
         }
 }; 
 
 }   // namespace Polytopes
+
+#endif 

@@ -1,3 +1,13 @@
+/**
+ * Helper class for representing linear constraints of the form `A * x <=/==/>= b`.
+ *
+ * **Authors:**
+ *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
+ *
+ * **Last updated:**
+ *     2/28/2022
+ */
+
 #ifndef LINEAR_CONSTRAINTS_HPP
 #define LINEAR_CONSTRAINTS_HPP
 
@@ -11,15 +21,6 @@
 #include <CGAL/QP_functions.h>
 #include <CGAL/Gmpzf.h>
 
-/**
- * Helper class for representing linear constraints of the form `A * x <=/==/>= b`.
- *
- * **Authors:**
- *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
- *
- * **Last updated:**
- *     2/27/2022
- */
 using namespace Eigen;
 typedef CGAL::Gmpzf ET;
 typedef CGAL::Quadratic_program<double> Program;
