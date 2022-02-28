@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
+#include <stack>
 #include <utility>
 #include <unordered_set>
 #include <Eigen/Dense>
@@ -23,7 +24,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/27/2022
+ *     2/28/2022
  */
 using namespace Eigen;
 using boost::multiprecision::number; 
@@ -279,35 +280,16 @@ class DictionarySystem
         }
 
         /**
-         * Update the basis to the given vector of indices. 
+         * Update the basis to the given vector of indices *without checking 
+         * whether the basis is valid*. 
          *
          * The vector of indices should contain `this->rows` distinct entries,
          * including `this->f` and excluding `this->g`.
          *
          * @param basis Given basis indices.
-         * @throws std::invalid_argument If the given basis is invalid (has
-         *                               wrong length, contains invalid indices,
-         *                               contains duplicates, does not contain
-         *                               `this->f`, or contains `this->g`). 
          */
         void __setBasis(const Ref<const VectorXi>& basis)
         {
-            // Check that the basis contains f, does not contain g, and
-            // consists of (this->rows) distinct indices
-            if (basis.size() != this->rows)
-                throw std::invalid_argument("Invalid basis specified"); 
-            std::unordered_set<int> indices; 
-            for (int i = 0; i < this->rows; ++i)
-            {
-                if (basis(i) < 0 || basis(i) >= this->cols || basis(i) == this->g)
-                    throw std::invalid_argument("Specified basis contains invalid index"); 
-                indices.insert(basis(i));
-            }
-            if (indices.size() != this->rows)
-                throw std::invalid_argument("Specified basis contains duplicate indices"); 
-            if (indices.find(this->f) == indices.end())
-                throw std::invalid_argument("Specified basis does not contain 0");
-            
             // Update the basis and cobasis ...
             this->in_basis = VectorXb::Zero(this->cols); 
             for (int i = 0; i < this->rows; ++i)
@@ -489,7 +471,7 @@ class DictionarySystem
          * @throws std::invalid_argument If `f` or `g` are invalid (if `f` or 
          *                               `g` do not fall between 0 and
          *                               `this->cols - 1`, or if `f == g`), or
-         *                               if `basis` is invalid (see `__setBasis()`). 
+         *                               if `basis` is invalid (see `setBasis()`). 
          */
         DictionarySystem(const Ref<const MatrixXr>& A, const int f, const int g,
                          const Ref<const VectorXi>& basis)
@@ -509,7 +491,7 @@ class DictionarySystem
             this->in_basis.resize(this->cols); 
             this->basis.resize(this->rows); 
             this->cobasis.resize(this->cols - this->rows);  
-            this->__setBasis(basis);  
+            this->setBasis(basis);  
         } 
 
         /**
@@ -575,9 +557,29 @@ class DictionarySystem
          * Update the basis to the given vector of indices. 
          *
          * @param basis Given basis indices.
+         * @throws std::invalid_argument If the given basis is invalid (has
+         *                               wrong length, contains invalid indices,
+         *                               contains duplicates, does not contain
+         *                               `this->f`, or contains `this->g`). 
          */
         void setBasis(const Ref<const VectorXi>& basis)
         {
+            // Check that the basis contains f, does not contain g, and
+            // consists of (this->rows) distinct indices
+            if (basis.size() != this->rows)
+                throw std::invalid_argument("Invalid basis specified"); 
+            std::unordered_set<int> indices; 
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (basis(i) < 0 || basis(i) >= this->cols || basis(i) == this->g)
+                    throw std::invalid_argument("Specified basis contains invalid index"); 
+                indices.insert(basis(i));
+            }
+            if (indices.size() != this->rows)
+                throw std::invalid_argument("Specified basis contains duplicate indices"); 
+            if (indices.find(this->f) == indices.end())
+                throw std::invalid_argument("Specified basis does not contain 0");
+
             this->__setBasis(basis); 
         } 
 
@@ -1220,6 +1222,316 @@ class DictionarySystem
 
             // Is this reverse of the reverse pivot the same as the criss-cross pivot? 
             return (cc_i != -1 && new_j == cc_i && new_i == cc_j); 
+        }
+
+        /**
+         * Return the array of all possible reverse Bland pivots from the 
+         * current dictionary, given in lexicographic order.
+         *
+         * The returned array has two columns, and each row contains the basis
+         * and cobasis index forming each pivot.
+         *
+         * @returns Array of all possible reverse Bland pivots from the 
+         *          current dictionary, given in lexicographic order. 
+         */
+        MatrixXi getReverseBlandPivots()
+        {
+            int n = 0; 
+            MatrixXi reverse_bland(n, 2); 
+
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi)
+                {
+                    for (int j = 0; j < this->cols - this->rows; ++j)
+                    {
+                        if (j != this->gi)
+                        {
+                            // Check whether (i, j) is a reverse Bland pivot
+                            //
+                            // Note that this can raise an InvalidPivotException,
+                            // in which case (i, j) is not even a valid pivot to
+                            // begin with 
+                            bool is_reverse_bland;  
+                            try
+                            {
+                                is_reverse_bland = this->isReverseBlandPivot(i, j); 
+                            }
+                            catch (const InvalidPivotException& e)
+                            {
+                                continue; 
+                            }
+                            if (is_reverse_bland)
+                            {
+                                n++; 
+                                reverse_bland.conservativeResize(n, 2); 
+                                reverse_bland(n-1, 0) = i; 
+                                reverse_bland(n-1, 1) = j; 
+                            }
+                        }
+                    }
+                }
+            }
+
+            return reverse_bland;
+        }
+
+        /**
+         * Return the array of all possible reverse criss-cross pivots from the 
+         * current dictionary, given in lexicographic order.
+         *
+         * The returned array has two columns, and each row contains the basis
+         * and cobasis index forming each pivot.
+         *
+         * @returns Array of all possible reverse criss-cross pivots from the 
+         *          current dictionary, given in lexicographic order. 
+         */
+        MatrixXi getReverseCrissCrossPivots()
+        {
+            int n = 0; 
+            MatrixXi reverse_cc(n, 2); 
+
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi)
+                {
+                    for (int j = 0; j < this->cols - this->rows; ++j)
+                    {
+                        if (j != this->gi)
+                        {
+                            // Check whether (i, j) is a reverse criss-cross pivot
+                            //
+                            // Note that this can raise an InvalidPivotException,
+                            // in which case (i, j) is not even a valid pivot to
+                            // begin with 
+                            bool is_reverse_cc; 
+                            try
+                            {
+                                is_reverse_cc = this->isReverseCrissCrossPivot(i, j); 
+                            }
+                            catch (const InvalidPivotException& e)
+                            {
+                                continue; 
+                            }
+                            if (is_reverse_cc)
+                            {
+                                n++; 
+                                reverse_cc.conservativeResize(n, 2); 
+                                reverse_cc(n-1, 0) = i; 
+                                reverse_cc(n-1, 1) = j; 
+                            }
+                        }
+                    }
+                }
+            }
+
+            return reverse_cc;
+        }
+
+        /**
+         * Perform a depth-first search of all *primal feasible* dictionaries
+         * accessible from the current dictionary via reverse Bland pivots,
+         * which is assumed to be optimal.
+         *
+         * @returns Array of *primal feasible* bases in the order in which
+         *          they were encountered.
+         * @throws PrimalInfeasibleException If the initial dictionary is 
+         *                                   primal infeasible. 
+         * @throws DualInfeasibleException   If the initial dictionary is 
+         *                                   dual infeasible. 
+         */
+        MatrixXi searchFromOptimalDictBland()
+        {
+            // Check that the search begins at an optimal dictionary
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi && !this->isPrimalFeasible(i))
+                    throw PrimalInfeasibleException("Search must begin at optimal dictionary");
+            }
+            for (int i = 0; i < this->cols - this->rows; ++i)
+            {
+                if (i != this->gi && !this->isDualFeasible(i))
+                    throw DualInfeasibleException("Search must begin at optimal dictionary"); 
+            }
+
+            // Maintain a stack of bases and their possible reverse Bland pivots ... 
+            std::stack<VectorXi> pivots;
+
+            // ... and a stack of performed reverse Bland pivots
+            std::stack<std::pair<int, int> > reverses_of_performed_pivots;  
+
+            // Initialize the former stack with all possible reverse Bland pivots
+            // from the initial optimal dictionary
+            //
+            // Add the reverse pivots in rev-lex-min order, so that they can 
+            // be performed in lex-min order when popping off the stack 
+            MatrixXi reverse_bland = this->getReverseBlandPivots();
+            for (int i = reverse_bland.rows() - 1; i >= 0; --i)
+            {
+                VectorXi pivot(this->rows + 2);
+                pivot.head(this->rows) = this->basis;  
+                pivot.tail(2) = reverse_bland.row(i);
+                pivots.push(pivot);  
+            }
+
+            // Initialize array of bases encountered during the search 
+            int n = 1; 
+            MatrixXi bases(n, this->rows); 
+            bases.row(n-1) = this->basis; 
+
+            // While the stack is non-empty ... 
+            while (!pivots.empty())
+            {
+                // Pop the next reverse Bland pivot from the stack 
+                VectorXi next = pivots.top();
+                pivots.pop();
+
+                // If the current basis does not match the basis corresponding 
+                // to this next pivot, reverse as many performed pivots as 
+                // needed to restore the latter basis
+                while (this->basis != next.head(this->rows))
+                {
+                    std::pair<int, int> prev = reverses_of_performed_pivots.top(); 
+                    reverses_of_performed_pivots.pop();
+                    this->__pivot(prev.first, prev.second);  
+                }
+
+                // Perform the pivot
+                int new_i, new_j; 
+                std::tie(new_i, new_j) = this->__pivot(next(this->rows), next(this->rows+1));
+                reverses_of_performed_pivots.emplace(std::make_pair(new_i, new_j));
+                n++;
+                bases.conservativeResize(n, this->rows);  
+                bases.row(n-1) = this->basis; 
+
+                // Collect all possible reverse Bland pivots from the current
+                // dictionary
+                //
+                // Add the reverse pivots in rev-lex-min order, so that they can 
+                // be performed in lex-min order when popping off the stack 
+                reverse_bland = this->getReverseBlandPivots();
+                for (int i = reverse_bland.rows() - 1; i >= 0; --i)
+                {
+                    VectorXi pivot(this->rows + 2);
+                    pivot.head(this->rows) = this->basis;  
+                    pivot.tail(2) = reverse_bland.row(i);
+                    pivots.push(pivot);  
+                } 
+            }
+
+            // Restore the original optimal dictionary by reversing all 
+            // remaining performed pivots 
+            while (!reverses_of_performed_pivots.empty())
+            {
+                std::pair<int, int> prev = reverses_of_performed_pivots.top(); 
+                reverses_of_performed_pivots.pop(); 
+                this->__pivot(prev.first, prev.second); 
+            }
+
+            return bases; 
+        }
+
+        /**
+         * Perform a depth-first search of all *primal feasible* dictionaries
+         * accessible from the current dictionary via reverse criss-cross pivots,
+         * which is assumed to be optimal.
+         *
+         * @returns Array of bases in the order in which they were encountered.
+         * @throws PrimalInfeasibleException If the initial dictionary is 
+         *                                   primal infeasible. 
+         * @throws DualInfeasibleException   If the initial dictionary is 
+         *                                   dual infeasible. 
+         */
+        MatrixXi searchFromOptimalDictCrissCross()
+        {
+            // Check that the search begins at an optimal dictionary
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi && !this->isPrimalFeasible(i))
+                    throw PrimalInfeasibleException("Search must begin at optimal dictionary");
+            }
+            for (int i = 0; i < this->cols - this->rows; ++i)
+            {
+                if (i != this->gi && !this->isDualFeasible(i))
+                    throw DualInfeasibleException("Search must begin at optimal dictionary"); 
+            }
+
+            // Maintain a stack of bases and their possible reverse criss-cross
+            // pivots ... 
+            std::stack<VectorXi> pivots;
+
+            // ... and a stack of performed reverse criss-cross pivots
+            std::stack<std::pair<int, int> > reverses_of_performed_pivots;  
+
+            // Initialize the former stack with all possible reverse criss-cross
+            // pivots from the initial optimal dictionary
+            //
+            // Add the reverse pivots in rev-lex-min order, so that they can 
+            // be performed in lex-min order when popping off the stack 
+            MatrixXi reverse_cc = this->getReverseCrissCrossPivots();
+            for (int i = reverse_cc.rows() - 1; i >= 0; --i)
+            {
+                VectorXi pivot(this->rows + 2);
+                pivot.head(this->rows) = this->basis;  
+                pivot.tail(2) = reverse_cc.row(i);
+                pivots.push(pivot);  
+            }
+
+            // Initialize array of bases encountered during the search 
+            int n = 1; 
+            MatrixXi bases(n, this->rows); 
+            bases.row(n-1) = this->basis; 
+
+            // While the stack is non-empty ... 
+            while (!pivots.empty())
+            {
+                // Pop the next reverse criss-cross pivot from the stack 
+                VectorXi next = pivots.top();
+                pivots.pop();
+
+                // If the current basis does not match the basis corresponding 
+                // to this next pivot, reverse as many performed pivots as 
+                // needed to restore the latter basis
+                while (this->basis != next.head(this->rows))
+                {
+                    std::pair<int, int> prev = reverses_of_performed_pivots.top(); 
+                    reverses_of_performed_pivots.pop();
+                    this->__pivot(prev.first, prev.second);  
+                }
+
+                // Perform the pivot
+                int new_i, new_j; 
+                std::tie(new_i, new_j) = this->__pivot(next(this->rows), next(this->rows+1));
+                reverses_of_performed_pivots.emplace(std::make_pair(new_i, new_j));
+                n++;
+                bases.conservativeResize(n, this->rows);  
+                bases.row(n-1) = this->basis; 
+
+                // Collect all possible reverse criss-cross pivots from the 
+                // current dictionary
+                //
+                // Add the reverse pivots in rev-lex-min order, so that they can 
+                // be performed in lex-min order when popping off the stack 
+                reverse_cc = this->getReverseCrissCrossPivots();
+                for (int i = reverse_cc.rows() - 1; i >= 0; --i)
+                {
+                    VectorXi pivot(this->rows + 2);
+                    pivot.head(this->rows) = this->basis;  
+                    pivot.tail(2) = reverse_cc.row(i);
+                    pivots.push(pivot);  
+                } 
+            }
+
+            // Restore the original optimal dictionary by reversing all 
+            // remaining performed pivots 
+            while (!reverses_of_performed_pivots.empty())
+            {
+                std::pair<int, int> prev = reverses_of_performed_pivots.top(); 
+                reverses_of_performed_pivots.pop(); 
+                this->__pivot(prev.first, prev.second); 
+            }
+
+            return bases; 
         }
 }; 
 
