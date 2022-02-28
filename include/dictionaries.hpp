@@ -208,7 +208,6 @@ class DictionarySystem
          * Dictionary coefficient matrix corresponding to the current basis.
          */
         MatrixXr dict_coefs; 
-        MatrixXr basis_inv_coefs; 
 
         /**
          * Basic solution of the current dictionary. 
@@ -257,15 +256,98 @@ class DictionarySystem
          */
         void updateDictCoefs()
         {
+            MatrixXr basis_inv_coefs; 
             try
             {
-                this->basis_inv_coefs = invertRational(this->core_A(Eigen::all, this->basis));
+                basis_inv_coefs = invertRational(this->core_A(Eigen::all, this->basis));
             }
             catch (const SingularMatrixException& e) 
             {
                 throw;
             } 
-            this->dict_coefs = -this->basis_inv_coefs * this->core_A(Eigen::all, this->cobasis); 
+            this->dict_coefs = -basis_inv_coefs * this->core_A(Eigen::all, this->cobasis); 
+        }
+
+        /**
+         * Update the dictionary from the current core linear system and choice
+         * of basis and cobasis, given that the current basis was obtained via 
+         * the given pivot, *without checking whether this is the case*.
+         *
+         * @param i     Position of basis variable in the previous basis. 
+         * @param j     Position of cobasis variable in the previous cobasis.
+         * @param new_i Position of old cobasis variable in the current basis. 
+         * @param new_j Position of old basis variable in the current cobasis.
+         * @param old_basis   Basis prior to pivot. 
+         * @param old_cobasis Cobasis prior to pivot.  
+         * @throws SingularMatrixException If the submatrix of the core matrix
+         *                                 corresponding to the basis columns  
+         *                                 is not invertible.
+         */
+        void updateDictCoefsFromPivot(const int i, const int j,
+                                      const int new_i, const int new_j,
+                                      const Ref<const VectorXi>& old_basis,
+                                      const Ref<const VectorXi>& old_cobasis)
+        {
+            if (this->dict_coefs(i, j) == 0)
+            {
+                throw SingularMatrixException(
+                    "Division-by-zero encountered during invalid pivot attempt"
+                );
+            } 
+            VectorXr row_i = this->dict_coefs.row(i); 
+            VectorXr col_j = this->dict_coefs.col(j);
+            mpq_rational c_ij = this->dict_coefs(i, j);
+            MatrixXr new_coefs(this->rows, this->cols - this->rows); 
+            for (int k = 0; k < this->rows; ++k)
+            {
+                if (k == new_i)    // If basis(k) is the new basis variable ...
+                {
+                    for (int m = 0; m < this->cols - this->rows; ++m)
+                    {
+                        if (m == new_j)   // If cobasis(m) is the new cobasis variable ...
+                        {
+                            new_coefs(k, m) = 1 / c_ij;
+                        }
+                        else              // Otherwise (if cobasis(m) was in the old cobasis too) ...
+                        {
+                            // Get the position of cobasis(m) in the old cobasis 
+                            int var_m = this->cobasis(m); 
+                            int old_m = std::distance(
+                                old_cobasis.begin(),
+                                std::find(old_cobasis.begin(), old_cobasis.end(), var_m)
+                            ); 
+                            new_coefs(k, m) = -row_i(old_m) / c_ij; 
+                        }
+                    }
+                }
+                else               // Otherwise (if basis(k) was in the old basis too) ...
+                {
+                    // Get the position of basis(k) in the old basis 
+                    int var_k = this->basis(k); 
+                    int old_k = std::distance(
+                        old_basis.begin(),
+                        std::find(old_basis.begin(), old_basis.end(), var_k)
+                    ); 
+                    for (int m = 0; m < this->cols - this->rows; ++m)
+                    {
+                        if (m == new_j)   // If cobasis(m) is the new cobasis variable ...
+                        {
+                            new_coefs(k, m) = col_j(old_k) / c_ij;
+                        } 
+                        else              // Otherwise (if cobasis(m) was in the old cobasis too) ...
+                        {
+                            // Get the position of cobasis(m) in the old cobasis 
+                            int var_m = this->cobasis(m); 
+                            int old_m = std::distance(
+                                old_cobasis.begin(), 
+                                std::find(old_cobasis.begin(), old_cobasis.end(), var_m)
+                            ); 
+                            new_coefs(k, m) = this->dict_coefs(old_k, old_m) - (col_j(old_k) * row_i(old_m) / c_ij); 
+                        } 
+                    }
+                }
+            }
+            this->dict_coefs = new_coefs;
         }
 
         /**
@@ -316,6 +398,8 @@ class DictionarySystem
          */
         std::pair<int, int> __pivot(const int i, const int j)
         {
+            VectorXi old_basis = this->basis; 
+            VectorXi old_cobasis = this->cobasis; 
             const int r = this->basis(i); 
             const int s = this->cobasis(j);
 
@@ -346,7 +430,9 @@ class DictionarySystem
             // Update the dictionary coefficient matrix and basic solution
             try
             {
-                this->updateDictCoefs();
+                this->updateDictCoefsFromPivot(
+                    i, j, new_i, new_j, old_basis, old_cobasis
+                ); 
             }
             // If the submatrix of the core matrix corresponding to the basis
             // variables is not invertible, then the pivot cannot be performed
@@ -539,18 +625,6 @@ class DictionarySystem
         MatrixXr getDictCoefs()
         {
             return this->dict_coefs; 
-        }
-
-        /**
-         * Return the inverse of the basis submatrix of the current dictionary
-         * coefficient matrix. 
-         *
-         * @returns Inverse of basis submatrix of current dictionary coefficient
-         *          matrix 
-         */
-        MatrixXr getBasisInvCoefs()
-        {
-            return this->basis_inv_coefs; 
         }
 
         /**
