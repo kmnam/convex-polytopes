@@ -14,7 +14,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/28/2022
+ *     3/3/2022
  */
 #ifndef DICTIONARIES_LINEAR_PROGRAM_HPP
 #define DICTIONARIES_LINEAR_PROGRAM_HPP
@@ -220,7 +220,7 @@ class DictionarySystem
         /**
          * Indicator for whether the current basic solution is degenerate. 
          */
-        bool is_degenerate;  
+        bool is_degenerate;
 
         /**
          * Update `this->basis` and `this->cobasis` from `this->in_basis`.
@@ -361,9 +361,108 @@ class DictionarySystem
             VectorXr v = VectorXr::Zero(this->cols - this->rows); 
             v(this->gi) = 1; 
             this->basic_solution = this->dict_coefs * v;
-            this->is_degenerate = (this->basic_solution.array() == 0).any();  
+            this->is_degenerate = false;  
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi && this->basic_solution(i) == 0)
+                {
+                    this->is_degenerate = true;
+                    break;
+                }
+            }
         }
 
+        /**
+         * Return the nondegenerate optimal subdictionary of an "augmented"
+         * version of the current dictionary, assuming it is degenerate and 
+         * optimal, as outlined in the procedure given in Avis & Fukuda (1992),
+         * Section 3.2.
+         *
+         * This method is used to generate all optimal dictionaries of the 
+         * core linear system.
+         *
+         * @returns Pointer to a new `DictionarySystem` instance storing the
+         *          nondegenerate optimal subdictionary, along with vectors 
+         *          that encode the "subbasis" and "subcobasis" variables that
+         *          are included in the subdictionary (defined below).  
+         */
+        std::tuple<DictionarySystem*, VectorXi, VectorXi> getSubdictFromDegenerateOptimalDict()
+        {
+            // Set the "subbasis" to the set of all variables with value zero
+            // in the current basic solution
+            int n = 0;
+            VectorXi subbasis(n);
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (this->basic_solution(i) == 0)
+                {
+                    n++; 
+                    subbasis.conservativeResize(n);
+                    subbasis(n-1) = this->basis(i);
+                }
+            } 
+
+            // Set the "subcobasis" to the set of all cobasis variables minus g
+            VectorXi subcobasis(this->cols - this->rows - 1);
+            for (int i = 0; i < this->cols - this->rows - 1; ++i)
+                subcobasis(i) = this->cobasis(i);
+
+            // Find the submatrix of the core matrix with rows given by the
+            // subbasis and columns given by the subcobasis (*plus an additional
+            // cobasis variable taking the place of g*) 
+            VectorXi subindices(n + this->cols - this->rows - 1); 
+            subindices.head(n) = subbasis; 
+            subindices.tail(this->cols - this->rows - 1) = subcobasis;
+            MatrixXr subcore(n, n + this->cols - this->rows);
+            subcore(Eigen::all, Eigen::seqN(0, n + this->cols - this->rows - 1))
+                = this->core_A(subbasis, subindices); 
+            subcore.col(n + this->cols - this->rows - 1) = VectorXr::Ones(n);
+
+            // Find the indices of the subbasis variables with respect to the
+            // above submatrix, i.e., find the indices of the subbasis variables
+            // when considering only the subbasis and subcobasis variables in
+            // increasing order
+            VectorXi _subbasis(n);
+            int b = 0;
+            int c = 0;
+            int f = 0; 
+            for (int i = 0; i < n + this->cols - this->rows; ++i)
+            {
+                // Break if we have exhausted the subbasis 
+                if (b >= n)
+                    break; 
+
+                // Otherwise, check if the i-th variable in the subsystem 
+                // is in the subbasis
+                if (c >= this->cols - this->rows - 1)
+                {
+                    _subbasis(b) = i;
+                    if (subbasis(b) == this->f)
+                        f = i;  
+                    b++; 
+                }
+                else if (subbasis(b) < subcobasis(c))
+                {
+                    _subbasis(b) = i;
+                    if (subbasis(b) == this->f)
+                        f = i;  
+                    b++; 
+                }
+                else 
+                {
+                    c++; 
+                }
+            }
+
+            // Return a pointer to a new DictionarySystem instance, along 
+            // with the original subbasis and subcobasis so that they can 
+            // be distinguished from the excluded variables  
+            DictionarySystem* subdict = new DictionarySystem(
+                subcore, f, n + this->cols - this->rows - 1, _subbasis
+            );
+            return std::make_tuple(subdict, subbasis, subcobasis);  
+        }
+       
         /**
          * Update the basis to the given vector of indices *without checking 
          * whether the basis is valid*. 
@@ -379,7 +478,7 @@ class DictionarySystem
             this->in_basis = VectorXb::Zero(this->cols); 
             for (int i = 0; i < this->rows; ++i)
                 this->in_basis(basis(i)) = true;
-            this->updateBasis(); 
+            this->updateBasis();
 
             // ... and the dictionary coefficient matrix and basic solution
             this->updateDictCoefs();
@@ -579,8 +678,8 @@ class DictionarySystem
             // Set the basis to the given indices
             this->in_basis.resize(this->cols); 
             this->basis.resize(this->rows); 
-            this->cobasis.resize(this->cols - this->rows);  
-            this->setBasis(basis);  
+            this->cobasis.resize(this->cols - this->rows);
+            this->setBasis(basis);
         } 
 
         /**
@@ -1406,9 +1505,61 @@ class DictionarySystem
         }
 
         /**
+         * Return the array of all possible reverse dual Bland pivots from the 
+         * current dictionary, given in lexicographic order.
+         *
+         * The returned array has two columns, and each row contains the basis
+         * and cobasis index forming each pivot.
+         *
+         * @returns Array of all possible reverse dual Bland pivots from the 
+         *          current dictionary, given in lexicographic order. 
+         */
+        MatrixXi getReverseDualBlandPivots()
+        {
+            int n = 0; 
+            MatrixXi reverse_dbland(n, 2); 
+
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi)
+                {
+                    for (int j = 0; j < this->cols - this->rows; ++j)
+                    {
+                        if (j != this->gi)
+                        {
+                            // Check whether (i, j) is a reverse dual Bland pivot
+                            //
+                            // Note that this can raise an InvalidPivotException,
+                            // in which case (i, j) is not even a valid pivot to
+                            // begin with 
+                            bool is_reverse_dbland; 
+                            try
+                            {
+                                is_reverse_dbland = this->isReverseDualBlandPivot(i, j); 
+                            }
+                            catch (const InvalidPivotException& e)
+                            {
+                                continue; 
+                            }
+                            if (is_reverse_dbland)
+                            {
+                                n++; 
+                                reverse_dbland.conservativeResize(n, 2); 
+                                reverse_dbland(n-1, 0) = i; 
+                                reverse_dbland(n-1, 1) = j; 
+                            }
+                        }
+                    }
+                }
+            }
+
+            return reverse_dbland;
+        }
+
+        /**
          * Perform a depth-first search of all *primal feasible* dictionaries
-         * accessible from the current dictionary via reverse Bland pivots,
-         * which is assumed to be optimal.
+         * accessible from the current dictionary (which is assumed to be
+         * optimal) via reverse Bland pivots.
          *
          * @returns Array of *primal feasible* bases in the order in which
          *          they were encountered, along with their corresponding 
@@ -1516,9 +1667,9 @@ class DictionarySystem
         }
 
         /**
-         * Perform a depth-first search of all *primal feasible* dictionaries
-         * accessible from the current dictionary via reverse criss-cross pivots,
-         * which is assumed to be optimal.
+         * Perform a depth-first search of all dictionaries accessible from
+         * the current dictionary (which is assumed to be optimal) via reverse
+         * criss-cross pivots.
          *
          * @returns Array of bases in the order in which they were encountered,
          *          together with their corresponding basic solutions. 
@@ -1623,6 +1774,224 @@ class DictionarySystem
             }
 
             return std::make_pair(bases, solutions); 
+        }
+
+        /**
+         * Perform a depth-first search of all *dual feasible* dictionaries
+         * accessible from the current dictionary (which is assumed to be
+         * optimal) via reverse dual Bland pivots.
+         *
+         * @returns Array of *dual feasible* bases in the order in which
+         *          they were encountered, along with their corresponding 
+         *          basic solutions. 
+         * @throws PrimalInfeasibleException If the initial dictionary is 
+         *                                   primal infeasible. 
+         * @throws DualInfeasibleException   If the initial dictionary is 
+         *                                   dual infeasible. 
+         */
+        std::pair<MatrixXi, MatrixXr> searchFromOptimalDictDualBland()
+        {
+            // Check that the search begins at an optimal dictionary
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi && !this->isPrimalFeasible(i))
+                    throw PrimalInfeasibleException("Search must begin at optimal dictionary");
+            }
+            for (int i = 0; i < this->cols - this->rows; ++i)
+            {
+                if (i != this->gi && !this->isDualFeasible(i))
+                    throw DualInfeasibleException("Search must begin at optimal dictionary"); 
+            }
+
+            // Maintain a stack of bases and their possible reverse dual Bland
+            // pivots ... 
+            std::stack<VectorXi> pivots;
+
+            // ... and a stack of performed reverse dual Bland pivots
+            std::stack<std::pair<int, int> > reverses_of_performed_pivots;  
+
+            // Initialize the former stack with all possible reverse dual Bland
+            // pivots from the initial optimal dictionary
+            //
+            // Add the reverse pivots in rev-lex-min order, so that they can 
+            // be performed in lex-min order when popping off the stack 
+            MatrixXi reverse_dbland = this->getReverseDualBlandPivots();
+            for (int i = reverse_dbland.rows() - 1; i >= 0; --i)
+            {
+                VectorXi pivot(this->rows + 2);
+                pivot.head(this->rows) = this->basis;  
+                pivot.tail(2) = reverse_dbland.row(i);
+                pivots.push(pivot);  
+            }
+
+            // Initialize array of bases encountered during the search 
+            int n = 1; 
+            MatrixXi bases(n, this->rows); 
+            bases.row(n-1) = this->basis;
+
+            // Initialize array of corresponding basic solutions
+            MatrixXr solutions(n, this->rows);
+            solutions.row(n-1) = this->basic_solution;  
+
+            // While the stack is non-empty ... 
+            while (!pivots.empty())
+            {
+                // Pop the next reverse dual Bland pivot from the stack 
+                VectorXi next = pivots.top();
+                pivots.pop();
+
+                // If the current basis does not match the basis corresponding 
+                // to this next pivot, reverse as many performed pivots as 
+                // needed to restore the latter basis
+                while (this->basis != next.head(this->rows))
+                {
+                    std::pair<int, int> prev = reverses_of_performed_pivots.top(); 
+                    reverses_of_performed_pivots.pop();
+                    this->__pivot(prev.first, prev.second);  
+                }
+
+                // Perform the pivot
+                int new_i, new_j; 
+                std::tie(new_i, new_j) = this->__pivot(next(this->rows), next(this->rows+1));
+                reverses_of_performed_pivots.emplace(std::make_pair(new_i, new_j));
+                n++;
+                bases.conservativeResize(n, this->rows);  
+                bases.row(n-1) = this->basis;
+                solutions.conservativeResize(n, this->rows); 
+                solutions.row(n-1) = this->basic_solution;  
+
+                // Collect all possible reverse dual Bland pivots from the
+                // current dictionary
+                //
+                // Add the reverse pivots in rev-lex-min order, so that they can 
+                // be performed in lex-min order when popping off the stack 
+                reverse_dbland = this->getReverseDualBlandPivots();
+                for (int i = reverse_dbland.rows() - 1; i >= 0; --i)
+                {
+                    VectorXi pivot(this->rows + 2);
+                    pivot.head(this->rows) = this->basis;  
+                    pivot.tail(2) = reverse_dbland.row(i);
+                    pivots.push(pivot);  
+                } 
+            }
+
+            // Restore the original optimal dictionary by reversing all 
+            // remaining performed pivots 
+            while (!reverses_of_performed_pivots.empty())
+            {
+                std::pair<int, int> prev = reverses_of_performed_pivots.top(); 
+                reverses_of_performed_pivots.pop(); 
+                this->__pivot(prev.first, prev.second); 
+            }
+
+            return std::make_pair(bases, solutions); 
+        }
+
+        /**
+         * Follow the procedure outlined in Avis & Fukuda (1992), Section 3.2
+         * to enumerate the (degenerate) optimal dictionaries of the given
+         * system.
+         *
+         * @returns Array of *optimal* bases of the given system.
+         * @throws PrimalInfeasibleException If the initial dictionary is 
+         *                                   primal infeasible. 
+         * @throws DualInfeasibleException   If the initial dictionary is 
+         *                                   dual infeasible. 
+         */
+        MatrixXi findOptimalDicts()
+        {
+            // Check that the search begins at an optimal dictionary
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (i != this->fi && !this->isPrimalFeasible(i))
+                    throw PrimalInfeasibleException("Search must begin at optimal dictionary");
+            }
+            for (int i = 0; i < this->cols - this->rows; ++i)
+            {
+                if (i != this->gi && !this->isDualFeasible(i))
+                    throw DualInfeasibleException("Search must begin at optimal dictionary"); 
+            }
+      
+            // Collect all optimal bases into a matrix 
+            int n = 1;
+            MatrixXi bases(n, this->rows);
+            bases.row(n-1) = this->basis; 
+
+            // If the current dictionary is non-degenerate and optimal, simply 
+            // return the current basis
+            if (!this->is_degenerate)
+                return bases; 
+
+            // Otherwise, obtain the nondegenerate optimal subdictionary 
+            // described in Avis & Fukuda (1992), Section 3.2 ...
+            DictionarySystem* subdict; 
+            VectorXi subbasis, subcobasis; 
+            std::tie(subdict, subbasis, subcobasis) = this->getSubdictFromDegenerateOptimalDict();
+
+            // ... combine the subbasis and subcobasis and re-sort ... 
+            VectorXi subindices(subbasis.size() + subcobasis.size());
+            VectorXb in_subindices = VectorXb::Zero(this->cols);  
+            int b = 0; 
+            int c = 0; 
+            for (int i = 0; i < subbasis.size() + subcobasis.size(); ++i)
+            {
+                if (subbasis(b) < subcobasis(c))
+                {
+                    subindices(i) = subbasis(b); 
+                    b++; 
+                }
+                else
+                {
+                    subindices(i) = subcobasis(c); 
+                    c++;
+                }
+                in_subindices(subindices(i)) = true; 
+            }
+            std::cout << in_subindices.transpose() << std::endl; 
+
+            // ... find all basis variables that were excluded from the 
+            // subsystem ...
+            VectorXi basis_excluded(this->rows - subbasis.size());
+            int k = 0;  
+            for (int i = 0; i < this->rows; ++i)
+            {
+                if (this->basic_solution(i) != 0)
+                {
+                    basis_excluded(k) = this->basis(i); 
+                    k++; 
+                }
+            }
+            std::cout << basis_excluded.transpose() << std::endl; 
+
+            // ... enumerate the dual feasible dictionaries of the subsystem ...
+            auto result = subdict->searchFromOptimalDictDualBland();
+            MatrixXi subbases = result.first;
+            std::cout << subbases << std::endl;  
+
+            // ... and map the indices in each dual feasible subbasis of the
+            // subsystem to their corresponding indices in the larger system
+            n += subbases.rows() - 1; 
+            bases.conservativeResize(n, this->rows);
+            for (int i = 1; i < subbases.rows(); ++i)
+            {
+                int p = 0;
+                int q = 0; 
+                for (int j = 0; j < this->rows; ++j)
+                {
+                    if (basis_excluded(p) < subindices(subbases(i, q)))
+                    {
+                        bases(i, j) = basis_excluded(p); 
+                        p++; 
+                    }
+                    else 
+                    {
+                        bases(i, j) = subindices(subbases(i, q)); 
+                        q++; 
+                    }
+                }
+            }
+
+            return bases; 
         }
 }; 
 
