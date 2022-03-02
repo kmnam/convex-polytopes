@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/28/2022
+ *     3/2/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -407,12 +407,17 @@ class LinearConstraints
          * Note that, while the returned vector has scalar type `T`, the 
          * nearest-point quadratic program is solved with double-precision
          * arithmetic, meaning that the returned vector may be slightly
-         * inaccurate. 
+         * inaccurate.
          *
+         * The input vector may have scalar type other than `T` or double,
+         * but its coordinates are converted to doubles for the quadratic
+         * program.
+         * 
          * @param x Query vector. 
          * @returns Vector nearest to query that satisfies the constraints.  
          */
-        Matrix<T, Dynamic, 1> nearestL2(const Ref<const Matrix<T, Dynamic, 1> >& x)
+        template <typename U>
+        Matrix<T, Dynamic, 1> nearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
         {
             // First check that x itself satisfies the constraints
             if (this->query(x)) return x;
