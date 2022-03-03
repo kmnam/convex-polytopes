@@ -4,13 +4,14 @@
 #include "../../include/vertexEnum.hpp"
 
 /**
- * A brief example that samples points from the unit cube in three dimensions.
+ * A brief test suite for `PolyhedralDictionarySystem` based on the unit cube
+ * in three dimensions. 
  *
  * **Authors:**
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/27/2022
+ *     3/3/2022
  */
 // Instantiate random number generator 
 boost::random::mt19937 rng(1234567890);
@@ -691,6 +692,15 @@ void TEST_MODULE_GET_VERTICES(Polytopes::PolyhedralDictionarySystem* poly)
     std::tie(new_i, new_j, ind) = poly->pivot(new_i, new_j);
 }
 
+/**
+ * Test that `enumVertices()` correctly enumerates the eight vertices of 
+ * the unit cube. 
+ */
+int TEST_MODULE_ENUM_VERTICES(Polytopes::PolyhedralDictionarySystem* poly)
+{
+    std::cout << poly->enumVertices() << std::endl; 
+}
+
 int main(int argc, char** argv)
 {
     // Instantiate a polyhedral dictionary system from the unit cube constraints
@@ -713,8 +723,13 @@ int main(int argc, char** argv)
     // Test that seven primal feasible dictionaries (the initial optimal dictionary
     // plus six others obtained via pivoting) yield vertices of the unit cube
     TEST_MODULE_GET_VERTICES(poly); 
-    std::cout << "TEST_MODULE_GET_VERTICES: all tests passed" << std::endl; 
-    
+    std::cout << "TEST_MODULE_GET_VERTICES: all tests passed" << std::endl;
+
+    // Test that enumVertices() correctly enumerates the eight vertices of the
+    // unit cube
+    TEST_MODULE_ENUM_VERTICES(poly); 
+    std::cout << "TEST_MODULE_ENUM_VERTICES: all tests passed" << std::endl; 
+       
     delete poly; 
     return 0;
 }
