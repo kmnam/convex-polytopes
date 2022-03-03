@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/28/2022
+ *     3/3/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -148,44 +148,102 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         }
 
         /**
-         * Return the vertex associated with the current basic solution, given
-         * that the current dictionary is primal feasible. 
-         *
-         * If the current dictionary is primal infeasible, then an exception
-         * is thrown. 
+         * Return the vertex associated with the current basic solution.
          *
          * @returns Vertex associated with the current basic solution.
-         * @throws  PrimalInfeasibleException If the current dictionary is 
-         *                                    primal infeasible.  
          */
         VectorXr getVertex()
         {
-            // Check that each basis variable is primal feasible 
-            for (int i = 0; i < this->rows; ++i)
-            {
-                if (i != this->fi && !this->isPrimalFeasible(i))
-                {
-                    throw PrimalInfeasibleException(
-                        "No vertex associated with primal infeasible dictionary"
-                    ); 
-                }
-            }
-
-            return this->basic_solution.tail(this->D); 
+            VectorXr solution_extended = VectorXr::Zero(this->cols); 
+            solution_extended(this->basis) = this->basic_solution;
+            return solution_extended(Eigen::seqN(this->N + 1, this->D));  
         }
 
         /**
          * Enumerate the vertices of the convex polytope via the Avis-Fukuda 
          * algorithm, i.e., a depth-first-search traversal of all primal
          * feasible dictionaries of the core system.
+         *
+         * The traversal is performed via reverse Bland pivots. 
+         *
+         * @returns Matrix of vertex coordinates, with each row a distinct
+         *          vertex of the polytope. 
          */
-        void enumVertices()
+        MatrixXr enumVertices()
         {
-            // Search for all primal feasible dictionaries accessible via 
-            // reverse Bland pivots from the current optimal dictionary 
-            auto result = this->searchFromOptimalDictBland();
-            MatrixXr solutions = result.second;
-            std::cout << solutions << std::endl;   
+            // Check that the initial dictionary is optimal ...
+            bool is_optimal = true; 
+            for (int i = 1; i <= this->N; ++i)
+            {
+                if (!this->isPrimalFeasible(i))
+                {
+                    is_optimal = false;
+                    break; 
+                }
+            }
+            for (int i = 0; i < this->D; ++i)
+            {
+                if (!this->isDualFeasible(i))
+                {
+                    is_optimal = false;
+                    break;
+                }
+            }
+
+            // ... and if it is *not* optimal, then change the basis to its
+            // initial form: 
+            //
+            // basis   = {0, 1, ..., this->N}
+            // cobasis = {this->N + 1, ..., this->N + this->D, this->N + this->D + 1}
+            if (!is_optimal)
+            {
+                VectorXi new_basis(this->N + 1); 
+                for (int i = 0; i <= this->N; ++i)
+                    new_basis(i) = i; 
+                this->__setBasis(new_basis); 
+            }
+
+            // Search for all optimal dictionaries accessible via reverse
+            // dual Bland pivots from the current optimal dictionary 
+            MatrixXi opt_bases = this->findOptimalDicts();
+
+            // From each such optimal dictionary, run a separate depth-first
+            // search via reverse Bland pivots
+            int n = 0; 
+            MatrixXr vertices(n, this->D); 
+            for (int i = 0; i < opt_bases.rows(); ++i)
+            {
+                this->__setBasis(opt_bases.row(i));
+                MatrixXi bases; 
+                MatrixXr solutions; 
+                std::tie(bases, solutions) = this->searchFromOptimalDictBland();
+                for (int j = 0; j < solutions.rows(); ++j)
+                {
+                    VectorXr solution_extended = VectorXr::Zero(this->cols);
+                    solution_extended(bases.row(j)) = solutions.row(j);
+                    VectorXr vertex = solution_extended(Eigen::seqN(this->N + 1, this->D));
+
+                    // Add the vertex to the matrix to be returned if it has not
+                    // been encountered yet
+                    bool vertex_prev_found = false; 
+                    for (int k = 0; k < n; ++k)
+                    {
+                        if ((vertices.array().row(k) == vertex.transpose().array()).all())
+                        {
+                            vertex_prev_found = true;
+                            break; 
+                        }
+                    }
+                    if (!vertex_prev_found)
+                    {
+                        n++; 
+                        vertices.conservativeResize(n, this->D); 
+                        vertices.row(n-1) = vertex; 
+                    }
+                }
+            }
+
+            return vertices;  
         }
 };
 
@@ -321,92 +379,95 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
             MatrixXr y = x.tail(this->D) - this->b.tail(this->D); 
             return M * y; 
         }
-       
+
         /**
-         * 
+         * Enumerate the vertices of the hyperplane arrangement via the
+         * Avis-Fukuda algorithm, i.e., a depth-first-search traversal of all
+         * dictionaries of the core system.
+         *
+         * The traversal is performed via reverse criss-cross pivots. 
+         *
+         * @returns Matrix of vertex coordinates, with each row a distinct
+         *          vertex of the arrangement.  
          */
-        void search()
+        MatrixXr enumVertices()
         {
-            int i = 1;
-            int j = 0;
-            int n = 0;  
-            do
+            // Check that the initial dictionary is optimal ...
+            bool is_optimal = true; 
+            for (int i = 0; i < this->basis.size() - 1; ++i)
             {
-                // Keep incrementing (i, j) until we find a reverse Bland or 
-                // criss-cross pivot
-                bool is_reverse_bland = this->isReverseBlandPivot(i, j); 
-                bool is_reverse_cc = this->isReverseCrissCrossPivot(i, j); 
-                while (i <= this->N && !is_reverse_bland && !is_reverse_cc)
+                if (i != this->fi && !this->isPrimalFeasible(i))
                 {
-                    j++;
-                    if (j == this->D + 1)
-                    {
-                        j = 0; 
-                        i++; 
-                    }
-                    is_reverse_bland = this->isReverseBlandPivot(i, j); 
-                    is_reverse_cc = this->isReverseCrissCrossPivot(i, j); 
+                    is_optimal = false;
+                    break; 
                 }
-
-                // If we have found a reverse Bland or criss-cross pivot ...
-                if (i <= this->N)
-                {
-                    // ... then perform the pivot
-                    std::tie(i, j) = this->__pivot(i, j);
-                    if (i == -1)
-                        throw std::runtime_error("What's happening here????"); 
-
-                    // If the corresponding basic solution is degenerate, check
-                    // whether it corresponds to a lex-min basis 
-                    if (this->is_degenerate)
-                    {
-                        bool lexmin = true; 
-                        for (int k = 1; k <= this->N; ++k)
-                        {
-                            for (int m = 0; m < this->D; ++m)
-                            {
-                                if (this->dict_coefs(k, this->D) == 0 && this->dict_coefs(k, m) != 0)
-                                {
-                                    lexmin = false; 
-                                    break; 
-                                }
-                            }
-                            if (!lexmin)
-                                break; 
-                        }
-                        if (lexmin)
-                            std::cout << this->basic_solution.transpose() << std::endl; 
-                    }
-                    else 
-                        std::cout << this->basic_solution.transpose() << std::endl; 
-
-                    // Reset i and j
-                    i = 1; 
-                    j = 0; 
-                }
-                // Otherwise ... 
-                else 
-                {
-                    // ... then find and perform the Bland pivot corresponding
-                    // to the current dictionary
-                    std::tie(i, j) = this->pivotBland();
-                    if (i == -1)
-                        throw std::runtime_error("What's happening here????"); 
-                    
-                    // Increment i and j
-                    j++;
-                    if (j == this->D)
-                    {
-                        j = 0; 
-                        i++; 
-                    }
-                }
-                n++;
-                if (n == 5)
-                    break;  
             }
-            while (i <= this->N || this->basis(this->N) != this->N); 
+            for (int i = 0; i < this->cobasis.size() - 1; ++i)
+            {
+                if (!this->isDualFeasible(i))
+                {
+                    is_optimal = false;
+                    break;
+                }
+            }
+
+            // ... and if it is *not* optimal, then change the basis to its 
+            // initial form:
+            //
+            // basis   = {0, 1, ..., this->N - this->D - 1, this->N}
+            // cobasis = {this->N - this->D, ..., this->N - 1, this->N + 1}
+            if (!is_optimal)
+            {
+                VectorXi new_basis(this->N - this->D + 1); 
+                for (int i = 0; i < this->N - this->D; ++i)
+                    new_basis(i) = i;
+                new_basis(this->N - this->D) = this->N; 
+                this->__setBasis(new_basis); 
+            }
+
+            // Search for all optimal dictionaries accessible via reverse
+            // dual Bland pivots from the current optimal dictionary 
+            MatrixXi opt_bases = this->findOptimalDicts();
+
+            // From each such optimal dictionary, run a separate depth-first
+            // search via reverse criss-cross pivots
+            int n = 0; 
+            MatrixXr vertices(n, this->D); 
+            for (int i = 0; i < opt_bases.rows(); ++i)
+            {
+                this->__setBasis(opt_bases.row(i));
+                MatrixXi bases; 
+                MatrixXr solutions; 
+                std::tie(bases, solutions) = this->searchFromOptimalDictCrissCross();
+                for (int j = 0; j < solutions.rows(); ++j)
+                {
+                    // Get the vertex associated with the j-th basic solution 
+                    this->__setBasis(bases.row(j)); 
+                    VectorXr vertex = this->getVertex();
+
+                    // Add the vertex to the matrix to be returned if it has not
+                    // been encountered yet
+                    bool vertex_prev_found = false; 
+                    for (int k = 0; k < n; ++k)
+                    {
+                        if ((vertices.array().row(k) == vertex.transpose().array()).all())
+                        {
+                            vertex_prev_found = true;
+                            break; 
+                        }
+                    }
+                    if (!vertex_prev_found)
+                    {
+                        n++; 
+                        vertices.conservativeResize(n, this->D); 
+                        vertices.row(n-1) = vertex; 
+                    }
+                }
+            }
+
+            return vertices;  
         }
+
 }; 
 
 }   // namespace Polytopes
