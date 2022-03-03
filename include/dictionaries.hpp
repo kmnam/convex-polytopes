@@ -389,12 +389,12 @@ class DictionarySystem
         std::tuple<DictionarySystem*, VectorXi, VectorXi> getSubdictFromDegenerateOptimalDict()
         {
             // Set the "subbasis" to the set of all variables with value zero
-            // in the current basic solution
+            // in the current basic solution plus f
             int n = 0;
             VectorXi subbasis(n);
             for (int i = 0; i < this->rows; ++i)
             {
-                if (this->basic_solution(i) == 0)
+                if (i == this->fi || this->basic_solution(i) == 0)
                 {
                     n++; 
                     subbasis.conservativeResize(n);
@@ -404,8 +404,10 @@ class DictionarySystem
 
             // Set the "subcobasis" to the set of all cobasis variables minus g
             VectorXi subcobasis(this->cols - this->rows - 1);
-            for (int i = 0; i < this->cols - this->rows - 1; ++i)
+            for (int i = 0; i < this->gi; ++i)
                 subcobasis(i) = this->cobasis(i);
+            for (int i = this->gi + 1; i < this->cols - this->rows; ++i)
+                subcobasis(i-1) = this->cobasis(i); 
 
             // Find the submatrix of the core matrix with rows given by the
             // subbasis and columns given by the subcobasis (*plus an additional
@@ -416,7 +418,7 @@ class DictionarySystem
             MatrixXr subcore(n, n + this->cols - this->rows);
             subcore(Eigen::all, Eigen::seqN(0, n + this->cols - this->rows - 1))
                 = this->core_A(subbasis, subindices); 
-            subcore.col(n + this->cols - this->rows - 1) = VectorXr::Ones(n);
+            subcore.col(n + this->cols - this->rows - 1) = -VectorXr::Ones(n);
 
             // Find the indices of the subbasis variables with respect to the
             // above submatrix, i.e., find the indices of the subbasis variables
@@ -1043,7 +1045,7 @@ class DictionarySystem
             // If no such index exists, then throw an exception
             if (i == -1)
                 throw PrimalFeasibleException(
-                    "Dual Bland's rule cannot be performed on dual feasible "
+                    "Dual Bland's rule cannot be performed on primal feasible "
                     "dictionary"
                 ); 
 
@@ -1056,7 +1058,7 @@ class DictionarySystem
                 if (k != this->gi)
                 {
                     mpq_rational denom = this->dict_coefs(i, k); 
-                    if (denom < 0)
+                    if (denom > 0)
                     {
                         mpq_rational value = -this->dict_coefs(this->fi, k) / denom; 
                         if (lambda > value) 
@@ -1428,7 +1430,7 @@ class DictionarySystem
                             // Note that this can raise an InvalidPivotException,
                             // in which case (i, j) is not even a valid pivot to
                             // begin with 
-                            bool is_reverse_bland;  
+                            bool is_reverse_bland = false;  
                             try
                             {
                                 is_reverse_bland = this->isReverseBlandPivot(i, j); 
@@ -1480,7 +1482,7 @@ class DictionarySystem
                             // Note that this can raise an InvalidPivotException,
                             // in which case (i, j) is not even a valid pivot to
                             // begin with 
-                            bool is_reverse_cc; 
+                            bool is_reverse_cc = false; 
                             try
                             {
                                 is_reverse_cc = this->isReverseCrissCrossPivot(i, j); 
@@ -1531,8 +1533,8 @@ class DictionarySystem
                             //
                             // Note that this can raise an InvalidPivotException,
                             // in which case (i, j) is not even a valid pivot to
-                            // begin with 
-                            bool is_reverse_dbland; 
+                            // begin with
+                            bool is_reverse_dbland = false; 
                             try
                             {
                                 is_reverse_dbland = this->isReverseDualBlandPivot(i, j); 
@@ -1928,26 +1930,35 @@ class DictionarySystem
             VectorXi subbasis, subcobasis; 
             std::tie(subdict, subbasis, subcobasis) = this->getSubdictFromDegenerateOptimalDict();
 
-            // ... combine the subbasis and subcobasis and re-sort ... 
+            // ... combine the subbasis and subcobasis and re-sort ...
             VectorXi subindices(subbasis.size() + subcobasis.size());
             VectorXb in_subindices = VectorXb::Zero(this->cols);  
             int b = 0; 
             int c = 0; 
             for (int i = 0; i < subbasis.size() + subcobasis.size(); ++i)
             {
-                if (subbasis(b) < subcobasis(c))
+                if (b >= subbasis.size())
                 {
-                    subindices(i) = subbasis(b); 
+                    subindices(i) = subcobasis(c);
+                    c++; 
+                }
+                else if (c >= subcobasis.size())
+                {
+                    subindices(i) = subbasis(b);
                     b++; 
                 }
-                else
+                else if (subbasis(b) < subcobasis(c))
                 {
-                    subindices(i) = subcobasis(c); 
+                    subindices(i) = subbasis(b);
+                    b++; 
+                }
+                else if (subbasis(b) > subcobasis(c))
+                {
+                    subindices(i) = subcobasis(c);
                     c++;
                 }
-                in_subindices(subindices(i)) = true; 
+                in_subindices(subindices(i)) = true;
             }
-            std::cout << in_subindices.transpose() << std::endl; 
 
             // ... find all basis variables that were excluded from the 
             // subsystem ...
@@ -1961,12 +1972,10 @@ class DictionarySystem
                     k++; 
                 }
             }
-            std::cout << basis_excluded.transpose() << std::endl; 
 
             // ... enumerate the dual feasible dictionaries of the subsystem ...
             auto result = subdict->searchFromOptimalDictDualBland();
             MatrixXi subbases = result.first;
-            std::cout << subbases << std::endl;  
 
             // ... and map the indices in each dual feasible subbasis of the
             // subsystem to their corresponding indices in the larger system
@@ -1978,7 +1987,17 @@ class DictionarySystem
                 int q = 0; 
                 for (int j = 0; j < this->rows; ++j)
                 {
-                    if (basis_excluded(p) < subindices(subbases(i, q)))
+                    if (p >= basis_excluded.size())
+                    {
+                        bases(i, j) = subindices(subbases(i, q)); 
+                        q++;
+                    }
+                    else if (q >= subbases.cols())
+                    {
+                        bases(i, j) = basis_excluded(p); 
+                        p++; 
+                    }
+                    else if (basis_excluded(p) < subindices(subbases(i, q)))
                     {
                         bases(i, j) = basis_excluded(p); 
                         p++; 
@@ -1991,6 +2010,7 @@ class DictionarySystem
                 }
             }
 
+            delete subdict; 
             return bases; 
         }
 }; 
