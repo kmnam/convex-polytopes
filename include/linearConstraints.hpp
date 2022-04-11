@@ -420,7 +420,8 @@ class LinearConstraints
         Matrix<T, Dynamic, 1> nearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
         {
             // First check that x itself satisfies the constraints
-            if (this->query(x)) return x;
+            Matrix<T, Dynamic, 1> x_ = x.template cast<T>(); 
+            if (this->query(x_)) return x_;
 
             // Otherwise, solve the quadratic program for the nearest point to x
             for (unsigned i = 0; i < this->D; ++i)
