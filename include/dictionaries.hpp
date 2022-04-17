@@ -14,7 +14,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     3/3/2022
+ *     4/17/2022
  */
 #ifndef DICTIONARIES_LINEAR_PROGRAM_HPP
 #define DICTIONARIES_LINEAR_PROGRAM_HPP
@@ -107,26 +107,24 @@ class OptimalDictionaryException : public std::runtime_error
  * @param c Constant obtained from previous Faddevv-LeVerrier iteration(s). 
  * @param i Iteration number.
  * @returns Next matrix and constant from the Faddeev-LeVerrier algorithm.
- * @throws  boost::wrapexcept<std::overflow_error> If the Faddeev-LeVerrier
- *                                                 algorithm fails due to
- *                                                 division-by-zero.  
+ * @throws  std::invalid_argument If the Faddeev-LeVerrier algorithm fails 
+ *                                due to division-by-zero.
  */
 std::pair<MatrixXr, mpq_rational> faddeevLeVerrier(const Ref<const MatrixXr>& A,
                                                    const Ref<const MatrixXr>& M,
                                                    const mpq_rational c,
                                                    const int i)
 {
+    if (i == 0)
+        throw std::invalid_argument("Faddeev-LeVerrier algorithm failed due to division-by-zero"); 
+
     MatrixXr M_next = A * M + c * MatrixXr::Identity(A.rows(), A.rows());
-    mpq_rational c_next; 
-    try
-    {
-        c_next = -(A * M_next).trace() / i;
-    }
-    catch (const boost::wrapexcept<std::overflow_error>& e)
-    {
-        throw; 
-    } 
-    return std::make_pair(M_next, c_next); 
+    MatrixXr prod = -(A * M_next); 
+    mpq_rational c_next = 0;
+    for (unsigned j = 0; j < prod.rows(); ++j)
+        c_next += prod(j, j);
+    
+    return std::make_pair(M_next, c_next / i); 
 }
 
 /**
@@ -148,7 +146,7 @@ MatrixXr invertRational(const Ref<const MatrixXr>& A)
         { 
             next = faddeevLeVerrier(A, M, c, i);
         }
-        catch (const boost::wrapexcept<std::overflow_error>& e) 
+        catch (const std::invalid_argument& e)
         {
             throw SingularMatrixException(
                 "Matrix inversion failed due to division-by-zero encountered "
@@ -159,19 +157,15 @@ MatrixXr invertRational(const Ref<const MatrixXr>& A)
         c = next.second;
     }
 
-    MatrixXr inv;
-    try
-    {
-        inv = -M / c;
-    }
-    catch (boost::wrapexcept<std::overflow_error>& e)
+    if (c == 0)
     {
         throw SingularMatrixException(
             "Matrix inversion failed due to division-by-zero encountered "
             "during Faddeev-LeVerrier algorithm"
-        ); 
+        );
     }
-    return inv; 
+
+    return -M / c;
 }
 
 class DictionarySystem
