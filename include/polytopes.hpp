@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     2/17/2022
+ *     4/22/2022
  */
 
 #ifndef POLYTOPES_HPP 
@@ -437,6 +437,27 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation& tri, const int cod
     }
 
     return faces; 
+}
+
+/**
+ * Given a matrix of coordinates for the *vertices* of a convex polytope, 
+ * return the Delaunay triangulation of the convex polytope.
+ * 
+ * @param vertices Matrix of vertex coordinates. 
+ * @returns        `Delaunay_triangulation` instance storing the triangulation. 
+ */
+Delaunay_triangulation triangulate(const Matrix<mpq_rational, Dynamic, Dynamic> vertices)
+{
+    // The number of columns in the matrix gives the dimension of the polytope's 
+    // ambient space 
+    int dim = vertices.cols(); 
+
+    // Instantiate the Delaunay triangulation and insert each vertex 
+    Delaunay_triangulation tri(dim);
+    for (unsigned i = 0; i < vertices.rows(); ++i) 
+        tri.insert(Point(dim, std::begin(vertices.row(i)), std::end(vertices.row(i)))); 
+
+    return tri; 
 }
 
 /**
