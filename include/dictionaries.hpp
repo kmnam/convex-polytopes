@@ -14,7 +14,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/17/2022
+ *     4/25/2022
  */
 #ifndef DICTIONARIES_LINEAR_PROGRAM_HPP
 #define DICTIONARIES_LINEAR_PROGRAM_HPP
@@ -261,8 +261,8 @@ class DictionarySystem
             catch (const SingularMatrixException& e) 
             {
                 throw;
-            } 
-            this->dict_coefs = -basis_inv_coefs * this->core_A(Eigen::all, this->cobasis); 
+            }
+            this->dict_coefs = -basis_inv_coefs * this->core_A(Eigen::all, this->cobasis);
         }
 
         /**
@@ -345,6 +345,36 @@ class DictionarySystem
                 }
             }
             this->dict_coefs = new_coefs;
+        }
+
+        /**
+         * Return true if `this->basis(i)` is primal feasible in the current 
+         * dictionary.
+         *
+         * This method is a protected version of `isPrimalFeasible()` that 
+         * assumes that `i != this->fi`, `i >= 0`, and `i < this->rows`.  
+         *
+         * @param i Position of variable in the current basis. 
+         * @returns True if the variable is primal feasible, false otherwise.
+         */ 
+        bool __isPrimalFeasible(const int i)
+        {
+            return (this->dict_coefs(i, this->gi) >= 0); 
+        }
+
+        /**
+         * Return true if `this->cobasis(i)` is dual feasible in the current 
+         * dictionary.
+         *
+         * This method is a protected version of `isDualFeasible()` that
+         * assumes that `i != this->gi`, `i >= 0`, and `i < this->cols - this->rows`.  
+         *
+         * @param i Position of variable in the current cobasis. 
+         * @returns True if the variable is dual feasible, false otherwise.
+         */ 
+        bool __isDualFeasible(const int i)
+        {
+            return (this->dict_coefs(this->fi, i) <= 0);
         }
 
         /**
@@ -829,7 +859,7 @@ class DictionarySystem
             bool all_dual_curr = true; 
             for (int k = 0; k < this->rows; ++k)
             {
-                if (all_primal_curr && k != this->fi && !this->isPrimalFeasible(k))
+                if (all_primal_curr && k != this->fi && !this->__isPrimalFeasible(k))
                 {
                     all_primal_curr = false;
                     break; 
@@ -837,7 +867,7 @@ class DictionarySystem
             }
             for (int k = 0; k < this->cols - this->rows; ++k)
             {
-                if (all_dual_curr && k != this->gi && !this->isDualFeasible(k))
+                if (all_dual_curr && k != this->gi && !this->__isDualFeasible(k))
                 { 
                     all_dual_curr = false;
                     break;
@@ -861,7 +891,7 @@ class DictionarySystem
             bool all_dual_next = true; 
             for (int k = 0; k < this->rows; ++k)
             {
-                if (all_primal_next && k != this->fi && !this->isPrimalFeasible(k))
+                if (all_primal_next && k != this->fi && !this->__isPrimalFeasible(k))
                 {
                     all_primal_next = false;
                     break;
@@ -869,7 +899,7 @@ class DictionarySystem
             }
             for (int k = 0; k < this->cols - this->rows; ++k)
             {
-                if (all_dual_next && k != this->gi && !this->isDualFeasible(k))
+                if (all_dual_next && k != this->gi && !this->__isDualFeasible(k))
                 {
                     all_dual_next = false;
                     break;
@@ -904,7 +934,7 @@ class DictionarySystem
             // Check whether the dictionary is primal feasible 
             for (int k = 0; k < this->rows; ++k)
             {
-                if (k != this->fi && !this->isPrimalFeasible(k))
+                if (k != this->fi && !this->__isPrimalFeasible(k))
                 {
                     throw PrimalInfeasibleException(
                         "Bland's rule cannot be performed on primal infeasible "
@@ -918,7 +948,7 @@ class DictionarySystem
             int j = -1;
             for (int k = 0; k < this->cols - this->rows; ++k)
             {
-                if (k != this->gi && !this->isDualFeasible(k))
+                if (k != this->gi && !this->__isDualFeasible(k))
                 {
                     j = k;
                     break; 
@@ -1015,7 +1045,7 @@ class DictionarySystem
             // Check whether the dictionary is dual feasible 
             for (int k = 0; k < this->cols - this->rows; ++k)
             {
-                if (k != this->gi && !this->isDualFeasible(k))
+                if (k != this->gi && !this->__isDualFeasible(k))
                 {
                     throw DualInfeasibleException(
                         "Dual Bland's rule cannot be performed on dual infeasible "
@@ -1029,7 +1059,7 @@ class DictionarySystem
             int i = -1;
             for (int k = 0; k < this->rows; ++k)
             {
-                if (k != this->fi && !this->isPrimalFeasible(k))
+                if (k != this->fi && !this->__isPrimalFeasible(k))
                 {
                     i = k;
                     break; 
@@ -1133,7 +1163,7 @@ class DictionarySystem
             {
                 if (this->in_basis(k) && k != this->f)        // Is a basis variable other than f
                 {
-                    if (!this->isPrimalFeasible(b))
+                    if (!this->__isPrimalFeasible(b))
                     {
                         i = b;
                         ith_var_in_basis = true; 
@@ -1147,7 +1177,7 @@ class DictionarySystem
                 }
                 else if (!this->in_basis(k) && k != this->g)  // Is a cobasis variable other than g
                 {
-                    if (!this->isDualFeasible(c))
+                    if (!this->__isDualFeasible(c))
                     {
                         i = c;
                         ith_var_in_basis = false; 
@@ -1570,12 +1600,12 @@ class DictionarySystem
             // Check that the search begins at an optimal dictionary
             for (int i = 0; i < this->rows; ++i)
             {
-                if (i != this->fi && !this->isPrimalFeasible(i))
+                if (i != this->fi && !this->__isPrimalFeasible(i))
                     throw PrimalInfeasibleException("Search must begin at optimal dictionary");
             }
             for (int i = 0; i < this->cols - this->rows; ++i)
             {
-                if (i != this->gi && !this->isDualFeasible(i))
+                if (i != this->gi && !this->__isDualFeasible(i))
                     throw DualInfeasibleException("Search must begin at optimal dictionary"); 
             }
 
@@ -1679,12 +1709,12 @@ class DictionarySystem
             // Check that the search begins at an optimal dictionary
             for (int i = 0; i < this->rows; ++i)
             {
-                if (i != this->fi && !this->isPrimalFeasible(i))
+                if (i != this->fi && !this->__isPrimalFeasible(i))
                     throw PrimalInfeasibleException("Search must begin at optimal dictionary");
             }
             for (int i = 0; i < this->cols - this->rows; ++i)
             {
-                if (i != this->gi && !this->isDualFeasible(i))
+                if (i != this->gi && !this->__isDualFeasible(i))
                     throw DualInfeasibleException("Search must begin at optimal dictionary"); 
             }
 
@@ -1790,12 +1820,12 @@ class DictionarySystem
             // Check that the search begins at an optimal dictionary
             for (int i = 0; i < this->rows; ++i)
             {
-                if (i != this->fi && !this->isPrimalFeasible(i))
+                if (i != this->fi && !this->__isPrimalFeasible(i))
                     throw PrimalInfeasibleException("Search must begin at optimal dictionary");
             }
             for (int i = 0; i < this->cols - this->rows; ++i)
             {
-                if (i != this->gi && !this->isDualFeasible(i))
+                if (i != this->gi && !this->__isDualFeasible(i))
                     throw DualInfeasibleException("Search must begin at optimal dictionary"); 
             }
 
@@ -1899,12 +1929,12 @@ class DictionarySystem
             // Check that the search begins at an optimal dictionary
             for (int i = 0; i < this->rows; ++i)
             {
-                if (i != this->fi && !this->isPrimalFeasible(i))
+                if (i != this->fi && !this->__isPrimalFeasible(i))
                     throw PrimalInfeasibleException("Search must begin at optimal dictionary");
             }
             for (int i = 0; i < this->cols - this->rows; ++i)
             {
-                if (i != this->gi && !this->isDualFeasible(i))
+                if (i != this->gi && !this->__isDualFeasible(i))
                     throw DualInfeasibleException("Search must begin at optimal dictionary"); 
             }
       
