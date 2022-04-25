@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/11/2022
+ *     4/25/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -61,7 +61,7 @@ class LinearConstraints
         Program nearest_L2;               /** Quadratic program for nearest-point queries. */
 
         /**
-         * Update the internal nearest-point by-L2-distance quadratic program
+         * Update the internal nearest-point-by-L2-distance quadratic program
          * with coefficients given by the current constraint matrix and vector. 
          */
         void updateNearestL2()
@@ -240,12 +240,34 @@ class LinearConstraints
         }
 
         /**
-         * Update `this->type`. 
+         * Set `this->type` to the given inequality type. 
          *
-         * @param type Inequality type. 
+         * This method *does not update* `this->A` or `this->b`, but does 
+         * update the nearest-point-by-L2-distance quadratic program to 
+         * reflect the new inequality type.
+         *
+         * @param type Inequality type.  
          */
-        void setInequalityType(const InequalityType type)
+        void setInequalityType(const InequalityType type) 
         {
+            this->type = type;
+            this->updateNearestL2(); 
+        }
+
+        /**
+         * Switch the inequality type of the stored constraints.
+         *
+         * This negates both `this->A` and `this->b`, and also updates the 
+         * nearest-point-by-L2-distance quadratic program.  
+         */
+        void switchInequalityType()
+        {
+            if (this->type == InequalityType::GreaterThanOrEqualTo)
+                this->type = InequalityType::LessThanOrEqualTo; 
+            else if (this->type == InequalityType::LessThanOrEqualTo)
+                this->type = InequalityType::GreaterThanOrEqualTo;
+            this->A *= -1; 
+            this->b *= -1; 
             this->type = type;
             this->updateNearestL2(); 
         }
