@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     3/3/2022
+ *     4/25/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -144,6 +144,29 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
             this->removeRedundantConstraints(); 
             this->updateCore(); 
             this->updateDictCoefs();
+            this->updateBasicSolution(); 
+        }
+
+        /**
+         * Switch the inequality type of the stored constraints. 
+         *
+         * In addition to negating both `this->A` and `this->b` and updating 
+         * the nearest-point-by-L2-distance quadratic program, this method
+         * also updates the core matrix, dictionary coefficient matrix, and 
+         * current basic solution. 
+         */
+        void switchInequalityType()
+        {
+            if (this->type == InequalityType::GreaterThanOrEqualTo)
+                this->type = InequalityType::LessThanOrEqualTo; 
+            else if (this->type == InequalityType::LessThanOrEqualTo)
+                this->type = InequalityType::GreaterThanOrEqualTo; 
+            this->A *= -1; 
+            this->b *= -1; 
+            this->type = type; 
+            this->updateNearestL2(); 
+            this->updateCore();
+            this->updateDictCoefs(); 
             this->updateBasicSolution(); 
         }
 
