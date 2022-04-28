@@ -27,7 +27,7 @@
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
 #include <boost/random.hpp>
-#include <CGAL/Epeck_d.h>
+#include <CGAL/Epick_d.h>
 #include <CGAL/Cartesian_d.h>
 #include <CGAL/Triangulation.h>
 #include <CGAL/Delaunay_triangulation.h>
@@ -38,7 +38,7 @@ using boost::multiprecision::gmp_int;
 using boost::multiprecision::mpq_rational;
 using boost::multiprecision::mpfr_float_backend;
 
-typedef CGAL::Epeck_d<CGAL::Dynamic_dimension_tag>         Kd;
+typedef CGAL::Epick_d<CGAL::Dynamic_dimension_tag>         Kd;
 typedef CGAL::Delaunay_triangulation<Kd>                   Delaunay_triangulation; 
 typedef Delaunay_triangulation::Point                      Point;  
 typedef Delaunay_triangulation::Full_cell_handle           Full_cell_handle;
@@ -446,16 +446,19 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation& tri, const int cod
  * @param vertices Matrix of vertex coordinates. 
  * @returns        `Delaunay_triangulation` instance storing the triangulation. 
  */
-Delaunay_triangulation triangulate(const Matrix<mpq_rational, Dynamic, Dynamic> vertices)
+Delaunay_triangulation triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& vertices)
 {
     // The number of columns in the matrix gives the dimension of the polytope's 
     // ambient space 
-    int dim = vertices.cols(); 
+    int dim = vertices.cols();
+
+    // Convert coordinates to doubles 
+    MatrixXd _vertices = vertices.cast<double>(); 
 
     // Instantiate the Delaunay triangulation and insert each vertex 
     Delaunay_triangulation tri(dim);
-    for (unsigned i = 0; i < vertices.rows(); ++i) 
-        tri.insert(Point(dim, std::begin(vertices.row(i)), std::end(vertices.row(i)))); 
+    for (unsigned i = 0; i < _vertices.rows(); ++i) 
+        tri.insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
 
     return tri; 
 }
