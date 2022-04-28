@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/25/2022
+ *     4/26/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -529,7 +529,7 @@ class LinearConstraints
             // Instantiate the linear program ...
             Program program(CGAL::SMALLER, false, 0.0, false, 0.0);
 
-            // ... excluding the k-th constraint ... 
+            // ... excluding the k-th constraint
             for (unsigned i = 0; i < k; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
@@ -542,49 +542,34 @@ class LinearConstraints
                     program.set_a(j, i - 1, static_cast<double>(this->A(i, j)));
                 program.set_b(i - 1, static_cast<double>(this->b(i)));
             }
-            // ... and if the constraints are less-than-or-equal-to, setting
-            // the *negative* of the k-th constraint as the objective function ...
-            if (this->type == LessThanOrEqualTo)
+
+            // If the constraints are >=, set the objective function to the
+            // k-th constraint  
+            if (this->type == InequalityType::GreaterThanOrEqualTo)
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program.set_c(i, static_cast<double>(-this->A(k, i)));
+                    program.set_c(i, static_cast<double>(this->A(k, i)));
+                program.set_c0(-static_cast<double>(this->b(k))); 
             }
-            // ... and otherwise setting the k-th constraint as the objective 
-            // function ...
+            // If the constraints are <=, set the objective function to the
+            // *negative* of the k-th constraint
             else
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program.set_c(i, static_cast<double>(this->A(k, i)));  
+                    program.set_c(i, -static_cast<double>(this->A(k, i)));
+                program.set_c0(static_cast<double>(this->b(k)));  
             } 
-            program.set_c0(0);
 
-            // ... and (try to) solve it
+            // Try to solve the program 
             Solution solution = CGAL::solve_quadratic_program(program, ET());
 
             // If the solution is infeasible, then return false (*not redundant*)
             if (solution.is_infeasible() || solution.is_unbounded() || !solution.is_optimal())
                 return false; 
 
-            // If the solution is feasible, then check that the solution satisfies
-            // the excised constraint
-            Matrix<T, Dynamic, 1> y = Matrix<T, Dynamic, 1>::Zero(this->D);
-            unsigned i = 0;
-            for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
-            {
-                y(i) = static_cast<T>(CGAL::to_double(*it));
-                i++;
-            }
-
-            // The explicit evaluations below are included because Eigen does
-            // not know how to deal with every expression template for every
-            // scalar type (especially Boost.Multiprecision types)
-            T value = this->A.row(k) * y;
-            if (this->type == LessThanOrEqualTo)
-                return (value <= this->b(k)); 
-            else if (this->type == GreaterThanOrEqualTo)
-                return (value >= this->b(k));
-            else 
-                return (value == this->b(k)); 
+            // If the solution is feasible, then check that the objective function
+            // evaluated at the solution is *non-negative*
+            return (solution.objective_value() >= 0);  
         }
 
         /**
@@ -609,6 +594,7 @@ class LinearConstraints
                     i++; 
                 }
             }
+            this->updateNearestL2(); 
         }
 };
 

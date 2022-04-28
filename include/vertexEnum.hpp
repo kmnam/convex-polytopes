@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/25/2022
+ *     4/26/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -71,7 +71,6 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
                 = MatrixXr::Identity(this->rows - 1, this->rows - 1);
             this->core_A(Eigen::seqN(1, this->rows - 1), this->cobasis.head(this->cols - this->rows - 1)) = this->A; 
             this->core_A(Eigen::seqN(1, this->rows - 1), this->cols - 1) = -this->b;
-            // TODO Introduce options for different inequality types
         }
 
     public:
@@ -125,9 +124,6 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         {
             this->__parse(filename, this->type);
             this->removeRedundantConstraints();
-            this->updateCore();
-            this->updateDictCoefs();
-            this->updateBasicSolution(); 
         }
 
         /**
@@ -142,9 +138,6 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         {
             this->__parse(filename, type); 
             this->removeRedundantConstraints(); 
-            this->updateCore(); 
-            this->updateDictCoefs();
-            this->updateBasicSolution(); 
         }
 
         /**
@@ -163,9 +156,37 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
                 this->type = InequalityType::GreaterThanOrEqualTo; 
             this->A *= -1; 
             this->b *= -1; 
-            this->type = type; 
             this->updateNearestL2(); 
             this->updateCore();
+            this->updateDictCoefs(); 
+            this->updateBasicSolution(); 
+        }
+
+        /**
+         * Remove all redundant constraints by iterating through them in the 
+         * order they are given in `this->A` and `this->b`, then update 
+         * `this->core_A`, `this->dict_coefs`, and `this->basic_solution`.  
+         */
+        void removeRedundantConstraints()
+        {
+            unsigned i = 0; 
+            while (i < this->N) 
+            {
+                // If the i-th constraint is redundant, remove it and reset 
+                // i to zero (start from the beginning of the reduced system)
+                if (this->isRedundant(i))
+                {
+                    this->removeConstraint(i); 
+                    i = 0; 
+                }
+                // Otherwise, keep going 
+                else 
+                {
+                    i++; 
+                }
+            }
+            this->updateNearestL2(); 
+            this->updateCore(); 
             this->updateDictCoefs(); 
             this->updateBasicSolution(); 
         }
@@ -179,7 +200,7 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         {
             VectorXr solution_extended = VectorXr::Zero(this->cols); 
             solution_extended(this->basis) = this->basic_solution;
-            return solution_extended(Eigen::seqN(this->N + 1, this->D));  
+            return solution_extended(Eigen::seqN(this->N + 1, this->D)); 
         }
 
         /**
@@ -375,9 +396,6 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
         {
             this->__parse(filename, Polytopes::InequalityType::IsEqualTo);
             this->removeRedundantConstraints();
-            this->updateCore();
-            this->updateDictCoefs();
-            this->updateBasicSolution(); 
         }
 
         /**
