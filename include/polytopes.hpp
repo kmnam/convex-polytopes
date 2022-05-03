@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/22/2022
+ *     5/3/2022
  */
 
 #ifndef POLYTOPES_HPP 
@@ -274,11 +274,12 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri)
 {
     int dim = tri.current_dimension();  
     std::vector<Simplex> faces;
+    std::cout << dim << std::endl; 
 
     // Run through the finite full-dimensional simplices in the triangulation ...  
     for (Finite_full_cell_iterator it = tri.finite_full_cells_begin(); it != tri.finite_full_cells_end(); ++it)
     {
-        Matrix<mpq_rational, Dynamic, Dynamic> face_vertex_coords(dim + 1, dim); 
+        Matrix<mpq_rational, Dynamic, Dynamic> face_vertex_coords(dim + 1, dim);
         
         // For each vertex in the face ...
         for (unsigned i = 0; i < dim + 1; ++i)
@@ -287,7 +288,9 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri)
             Point p = it->vertex(i)->point();
             for (unsigned j = 0; j < dim; ++j)
                 face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
-        } 
+        }
+        std::cout << "vertex coordinates for simplex:\n"; 
+        std::cout << face_vertex_coords << std::endl; 
         
         faces.emplace_back(Simplex(face_vertex_coords));
     }
@@ -464,6 +467,34 @@ Delaunay_triangulation triangulate(const Ref<const Matrix<mpq_rational, Dynamic,
 }
 
 /**
+ * Given an existing `Delaunay_triangulation` instance and a matrix of coordinates
+ * for the *vertices* of a convex polytope, *update* the given triangulation.
+ *
+ * @param vertices Matrix of vertex coordinates.
+ * @param tri      Reference to existing `Delaunay_triangulation` instance. 
+ * @returns        Reference to updated `Delaunay_triangulation` instance. 
+ */
+Delaunay_triangulation& triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& vertices,
+                                    Delaunay_triangulation& tri)
+{
+    // The number of columns in the matrix gives the dimension of the polytope's 
+    // ambient space 
+    int dim = vertices.cols();
+
+    // Convert coordinates to doubles 
+    MatrixXd _vertices = vertices.cast<double>(); 
+
+    // Clear the existing triangulation
+    tri.clear(); 
+
+    // Add each new vertex into the triangulation 
+    for (unsigned i = 0; i < _vertices.rows(); ++i) 
+        tri.insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
+
+    return tri; 
+}
+
+/**
  * Parse the given .vert file specifying a convex polytope in terms of its 
  * *vertices*, and return the Delaunay triangulation of the convex polytope.
  *
@@ -541,6 +572,9 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
         vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
     int dim = vertex_first.size();
 
+    // Clear the existing triangulation
+    tri.clear(); 
+
     // Insert the first point into the given triangulation
     tri.insert(Point(dim, vertex_first.begin(), vertex_first.end())); 
 
@@ -595,12 +629,16 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
         faces = getBoundaryFacets(tri);
     else 
         faces = getBoundaryFaces(tri, codim);
+    std::cout << "did you get the full-dim faces?\n";
+    std::cout << "how many are there? " << faces.size() << std::endl; 
 
     // Compute the (scaled) volume of each face 
-    int dim = tri.current_dimension(); 
+    int dim = tri.current_dimension();
+    std::cout << "dim = " << dim << std::endl; 
     Matrix<number<mpfr_float_backend<CayleyMengerPrecision> >, Dynamic, 1> volumes(faces.size()); 
     for (unsigned i = 0; i < faces.size(); ++i) 
-        volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>(); 
+        volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>();
+    std::cout << volumes.transpose() << std::endl;  
 
     // Instantiate a categorical distribution with probabilities 
     // proportional to the *boundary* simplex volumes
@@ -608,9 +646,10 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
     // The volumes are normalized into probabilities using double
     // arithmetic  
     VectorXd probs = (volumes / volumes.sum()).template cast<double>();
+    std::cout << probs.transpose() << std::endl; 
     std::vector<double> probs_vec; 
     for (unsigned i = 0; i < probs.size(); ++i)
-        probs_vec.push_back(probs(i)); 
+        probs_vec.push_back(probs(i));
     boost::random::discrete_distribution<> dist(probs_vec);
 
     // Sample from the desired subset of simplices
@@ -619,9 +658,11 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
     {
         // Sample a simplex with probability proportional to its volume
         int j = dist(rng);
+        std::cout << "sampled simplex " << j << std::endl; 
 
         // Get the corresponding simplex
-        sample.row(i) = faces[j].sample<SamplePrecision>(1, rng).template cast<double>(); 
+        sample.row(i) = faces[j].sample<SamplePrecision>(1, rng).template cast<double>();
+        std::cout << sample.row(i) << std::endl;  
     }
     
     return sample;
