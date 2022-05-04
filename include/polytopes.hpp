@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     5/3/2022
+ *     5/4/2022
  */
 
 #ifndef POLYTOPES_HPP 
@@ -274,7 +274,6 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri)
 {
     int dim = tri.current_dimension();  
     std::vector<Simplex> faces;
-    std::cout << dim << std::endl; 
 
     // Run through the finite full-dimensional simplices in the triangulation ...  
     for (Finite_full_cell_iterator it = tri.finite_full_cells_begin(); it != tri.finite_full_cells_end(); ++it)
@@ -289,9 +288,38 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri)
             for (unsigned j = 0; j < dim; ++j)
                 face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
         }
-        std::cout << "vertex coordinates for simplex:\n"; 
-        std::cout << face_vertex_coords << std::endl; 
+        faces.emplace_back(Simplex(face_vertex_coords));
+    }
+    
+    return faces;  
+}
+
+/**
+ * Return a vector of `Simplex` objects containing the vertex coordinates of 
+ * the *full-dimensional faces* in the interior of the given triangulation. 
+ *
+ * @param tri Pointer to dynamically allocated input triangulation.
+ * @returns   Vector of `Simplex` objects, each containing the vertex coordinates
+ *            of a full-dimensional face. 
+ */
+std::vector<Simplex> getFullDimFaces(Delaunay_triangulation* tri) 
+{
+    int dim = tri->current_dimension();  
+    std::vector<Simplex> faces;
+
+    // Run through the finite full-dimensional simplices in the triangulation ...  
+    for (Finite_full_cell_iterator it = tri->finite_full_cells_begin(); it != tri->finite_full_cells_end(); ++it)
+    {
+        Matrix<mpq_rational, Dynamic, Dynamic> face_vertex_coords(dim + 1, dim);
         
+        // For each vertex in the face ...
+        for (unsigned i = 0; i < dim + 1; ++i)
+        {
+            // Get the coordinates of the i-th vertex 
+            Point p = it->vertex(i)->point();
+            for (unsigned j = 0; j < dim; ++j)
+                face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
+        }
         faces.emplace_back(Simplex(face_vertex_coords));
     }
     
@@ -337,6 +365,58 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation& tri)
                 facet_vertex_coords(i, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
         for (unsigned i = j + 1; i < tri.current_dimension() + 1; ++i)
+        {
+            // Get the coordinates of the i-th vertex 
+            Point p = c->vertex(i)->point();
+            for (unsigned k = 0; k < dim; ++k)
+                facet_vertex_coords(i - 1, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
+        } 
+
+        facets.emplace_back(Simplex(facet_vertex_coords)); 
+    }
+
+    return facets;  
+}
+
+/**
+ * Return the vertex handles of the *facets* on the boundary of the given
+ * triangulation.
+ *
+ * @param tri Pointer to dynamically allocated input triangulation.
+ * @returns   Vector of vectors of vertex handles, each inner vector containing 
+ *            handles to the vertices of a boundary facet. 
+ */
+std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation* tri)
+{
+    int dim = tri->current_dimension();
+    std::vector<Simplex> facets;  
+
+    // Run through the full-dimensional simplices (both finite and infinite) 
+    // in the triangulation ...  
+    for (Full_cell_iterator it = tri->full_cells_begin(); it != tri->full_cells_end(); ++it)
+    {
+        Matrix<mpq_rational, Dynamic, Dynamic> facet_vertex_coords(dim, dim); 
+
+        // The facets are in bijective correspondence with the *infinite* 
+        // full-dimensional simplices in the triangulation 
+        if (!tri->is_infinite(it))
+            continue;
+        Facet facet(it, it->index(tri->infinite_vertex()));
+
+        // Get the simplex containing the facet and its co-vertex 
+        Full_cell_handle c = tri->full_cell(facet); 
+        int j = tri->index_of_covertex(facet);
+
+        // The vertices of the facet are the vertex of the simplex minus the 
+        // co-vertex 
+        for (unsigned i = 0; i < j; ++i)
+        {
+            // Get the coordinates of the i-th vertex 
+            Point p = c->vertex(i)->point();
+            for (unsigned k = 0; k < dim; ++k)
+                facet_vertex_coords(i, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
+        } 
+        for (unsigned i = j + 1; i < tri->current_dimension() + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
@@ -443,6 +523,98 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation& tri, const int cod
 }
 
 /**
+ * Given a triangulation, return the faces of the given codimension on the 
+ * boundary of the triangulation. 
+ *
+ * @param tri   Pointer to dynamically allocated input triangulation. 
+ * @param codim Desired codimension.
+ * @returns     Vector of vectors of vertex handles, each inner vector containing
+ *              handles to the vertices of a boundary face of the given codimension. 
+ */
+std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation* tri, const int codim) 
+{
+    // Only faces of codimension 1, ..., dimension - 1 are valid 
+    int tri_dim = tri->current_dimension(); 
+    if (codim < 1 || codim > tri_dim - 1) 
+        throw std::invalid_argument("Invalid codimension specified");
+    int face_dim = tri_dim - codim;
+
+    // If the desired faces are *facets* (codimension is 1), simply return them 
+    std::vector<Simplex> facets = getBoundaryFacets(tri); 
+    if (codim == 1) 
+        return facets;
+
+    // Each simplex of dimension D is spanned by D + 1 vertices 
+    //
+    // Therefore, to generate all possible sub-faces of the boundary facets
+    // (dimension = tri_dim - 1), we generate all (face_dim + 1)-combinations
+    // of the range 0, ..., tri_dim - 1 of the length corresponding to the
+    // desired codimension
+    std::vector<int> idx; 
+    for (int i = 0; i < tri_dim; ++i)
+        idx.push_back(i);
+    std::vector<std::vector<int> > combos = combinations(idx, face_dim + 1);
+
+    // Get the coordinates of all vertices in the triangulation in a single 
+    // matrix
+    Matrix<mpq_rational, Dynamic, Dynamic> all_vertex_coords(tri->number_of_vertices(), tri_dim);
+    int i = 0;  
+    for (auto it = tri->vertices_begin(); it != tri->vertices_end(); ++it) 
+    {
+        if (!tri->is_infinite(*it))
+        {
+            // Get the coordinates of each vertex
+            Point p = it->point(); 
+            for (unsigned j = 0; j < tri_dim; ++j) 
+                all_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));
+            i++;  
+        }
+    }
+
+    // Run through the boundary facets ... 
+    std::vector<Simplex> faces; 
+    std::unordered_set<std::string> face_strings; 
+    for (auto&& f : facets) 
+    {
+        // Get the indices of the vertices of the facet, as dictated by the 
+        // matrix of vertex coordinates for the full triangulation 
+        std::vector<int> vertex_indices_in_facet;
+        for (unsigned i = 0; i < tri_dim; ++i)
+        {
+            Matrix<mpq_rational, Dynamic, 1> v = f.getVertex(i);
+            Matrix<mpq_rational, Dynamic, 1>::Index nearest;
+            (all_vertex_coords.rowwise() - v.transpose()).cwiseAbs().rowwise().sum().minCoeff(&nearest);
+            vertex_indices_in_facet.push_back(static_cast<int>(nearest));
+        }
+
+        // Sort the vertex indices
+        std::sort(vertex_indices_in_facet.begin(), vertex_indices_in_facet.end());
+
+        // For each combination of vertices (which corresponds to a sub-face
+        // of the boundary facet of the desired codimension), generate the
+        // corresponding integer-string and check that it wasn't previously
+        // encountered
+        for (auto&& c : combos)
+        {
+            std::vector<int> sub; 
+            for (auto it = c.begin(); it != c.end(); ++it)
+                sub.push_back(vertex_indices_in_facet[*it]);
+            std::string s = intVectorToString(sub);
+
+            // If the combination (sub-face) was *not* encountered, then 
+            // add it to the vector to be returned
+            if (face_strings.find(s) == face_strings.end())
+            {
+                faces.emplace_back(Simplex(all_vertex_coords(sub, all)));
+                face_strings.insert(s); 
+            }
+        }
+    }
+
+    return faces; 
+}
+
+/**
  * Given a matrix of coordinates for the *vertices* of a convex polytope, 
  * return the Delaunay triangulation of the convex polytope.
  * 
@@ -492,6 +664,33 @@ Delaunay_triangulation& triangulate(const Ref<const Matrix<mpq_rational, Dynamic
         tri.insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
 
     return tri; 
+}
+
+/**
+ * Given a *pointer* to a dynamically allocated `Delaunay_triangulation` instance
+ * and a matrix of coordinates for the *vertices* of a convex polytope, *update*
+ * the given triangulation.
+ *
+ * @param vertices Matrix of vertex coordinates.
+ * @param tri      Pointer to existing `Delaunay_triangulation` instance. 
+ * @returns        Reference to updated `Delaunay_triangulation` instance. 
+ */
+void triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& vertices,
+                 Delaunay_triangulation* tri)
+{
+    // The number of columns in the matrix gives the dimension of the polytope's 
+    // ambient space 
+    int dim = vertices.cols();
+
+    // Convert coordinates to doubles 
+    MatrixXd _vertices = vertices.cast<double>(); 
+
+    // Clear the existing triangulation
+    tri->clear(); 
+
+    // Add each new vertex into the triangulation 
+    for (unsigned i = 0; i < _vertices.rows(); ++i) 
+        tri->insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
 }
 
 /**
@@ -599,6 +798,58 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
 }
 
 /**
+ * Parse the given .vert file specifying a convex polytope in terms of its 
+ * *vertices*, and *update* the given dynamically allocated `Delaunay_triangulation`
+ * instance with a new Delaunay triangulation of the convex polytope. 
+ *
+ * The file is assumed to be non-empty.  
+ *
+ * @param filename Path to input .vert polytope triangulation file.
+ * @param tri      Pointer to existing `Delaunay_triangulation` instance. 
+ * @returns        Reference to updated `Delaunay_triangulation` instance. 
+ */
+void parseVerticesFile(const std::string filename, Delaunay_triangulation* tri) 
+{
+    // Parse the *first* line of the given input file to obtain the dimension
+    // of the polytope's ambient space 
+    std::string line, token; 
+    std::ifstream infile(filename);
+    std::getline(infile, line);
+
+    // Each vertex is specified as a space-delimited string of N coefficients,
+    // where N is the dimension of the ambient space 
+    std::stringstream ss_first; 
+    ss_first << line; 
+    std::vector<double> vertex_first; 
+    while (std::getline(ss_first, token, ' '))
+        vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
+    int dim = vertex_first.size();
+
+    // Clear the existing triangulation
+    tri->clear(); 
+
+    // Insert the first point into the given triangulation
+    tri->insert(Point(dim, vertex_first.begin(), vertex_first.end())); 
+
+    // Parse each subsequent line in the input file 
+    while (std::getline(infile, line))
+    {
+        std::stringstream ss; 
+        std::vector<double> vertex; 
+        ss << line;
+        while (std::getline(ss, token, ' '))
+            vertex.push_back(std::stod(token));    // Store each vertex with double scalars 
+       
+        // Does the current vertex match all previous vertices in length? 
+        if (vertex.size() != dim)
+            throw std::runtime_error("Vertices of multiple dimensions specified in input file");
+
+        // Insert the current point into the Delaunay triangulation 
+        tri->insert(Point(dim, vertex.begin(), vertex.end()));
+    }
+}
+
+/**
  * Given a Delaunay triangulation of a convex polytope, sample uniformly from
  * different subsets of the polytope: 
  *
@@ -629,16 +880,12 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
         faces = getBoundaryFacets(tri);
     else 
         faces = getBoundaryFaces(tri, codim);
-    std::cout << "did you get the full-dim faces?\n";
-    std::cout << "how many are there? " << faces.size() << std::endl; 
 
     // Compute the (scaled) volume of each face 
     int dim = tri.current_dimension();
-    std::cout << "dim = " << dim << std::endl; 
     Matrix<number<mpfr_float_backend<CayleyMengerPrecision> >, Dynamic, 1> volumes(faces.size()); 
     for (unsigned i = 0; i < faces.size(); ++i) 
         volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>();
-    std::cout << volumes.transpose() << std::endl;  
 
     // Instantiate a categorical distribution with probabilities 
     // proportional to the *boundary* simplex volumes
@@ -646,7 +893,6 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
     // The volumes are normalized into probabilities using double
     // arithmetic  
     VectorXd probs = (volumes / volumes.sum()).template cast<double>();
-    std::cout << probs.transpose() << std::endl; 
     std::vector<double> probs_vec; 
     for (unsigned i = 0; i < probs.size(); ++i)
         probs_vec.push_back(probs(i));
@@ -658,11 +904,72 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
     {
         // Sample a simplex with probability proportional to its volume
         int j = dist(rng);
-        std::cout << "sampled simplex " << j << std::endl; 
 
         // Get the corresponding simplex
         sample.row(i) = faces[j].sample<SamplePrecision>(1, rng).template cast<double>();
-        std::cout << sample.row(i) << std::endl;  
+    }
+    
+    return sample;
+}
+
+/**
+ * Given a *pointer* to a dynamically allocated `Delaunay_triangulation` for a 
+ * convex polytope, sample uniformly from different subsets of the polytope: 
+ *
+ * - If `codim == 0`, then sample from the *interior* of the polytope (the 
+ *   union of its full-dimensional faces). 
+ * - If `codim > 0`, then sample from the subset of the *boundary* of the 
+ *   polytope formed by the union of the faces of the given codimension on 
+ *   the polytope's boundary. 
+ *
+ * Note that the sampled points are returned as doubles.  
+ *
+ * @param tri      Pointer to dynamically allocated input triangulation.
+ * @param npoints  Number of points to sample from the polytope.
+ * @param codim    Codimension of the simplices to sample from. 
+ * @param rng      Reference to existing random number generator instance.
+ * @returns        Delaunay triangulation parsed from the given file and the 
+ *                 matrix of sampled points. 
+ */
+template <int CayleyMengerPrecision, int SamplePrecision = CayleyMengerPrecision> 
+MatrixXd sampleFromConvexPolytope(Delaunay_triangulation* tri, const int npoints,
+                                  const int codim, boost::random::mt19937& rng)
+{
+    // Obtain the desired subset of simplices in the triangulation  
+    std::vector<Simplex> faces; 
+    if (codim == 0) 
+        faces = getFullDimFaces(tri); 
+    else if (codim == 1) 
+        faces = getBoundaryFacets(tri);
+    else 
+        faces = getBoundaryFaces(tri, codim);
+
+    // Compute the (scaled) volume of each face 
+    int dim = tri->current_dimension();
+    Matrix<number<mpfr_float_backend<CayleyMengerPrecision> >, Dynamic, 1> volumes(faces.size()); 
+    for (unsigned i = 0; i < faces.size(); ++i) 
+        volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>();
+
+    // Instantiate a categorical distribution with probabilities 
+    // proportional to the *boundary* simplex volumes
+    //
+    // The volumes are normalized into probabilities using double
+    // arithmetic  
+    VectorXd probs = (volumes / volumes.sum()).template cast<double>();
+    std::vector<double> probs_vec; 
+    for (unsigned i = 0; i < probs.size(); ++i)
+        probs_vec.push_back(probs(i));
+    boost::random::discrete_distribution<> dist(probs_vec);
+
+    // Sample from the desired subset of simplices
+    MatrixXd sample(npoints, dim); 
+    for (int i = 0; i < npoints; ++i)
+    {
+        // Sample a simplex with probability proportional to its volume
+        int j = dist(rng);
+
+        // Get the corresponding simplex
+        sample.row(i) = faces[j].sample<SamplePrecision>(1, rng).template cast<double>();
     }
     
     return sample;
