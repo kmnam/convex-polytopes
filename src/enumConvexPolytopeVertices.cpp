@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     3/3/2022
+ *     5/8/2022
  */
 
 #include <iostream>
@@ -32,5 +32,6 @@ int main(int argc, char** argv)
     Matrix<mpq_rational, Dynamic, Dynamic> vertices = dict->enumVertices(); 
     std::cout << vertices << std::endl;  
 
+    delete dict; 
     return 0; 
 }
