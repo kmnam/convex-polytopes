@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/26/2022
+ *     5/12/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -58,7 +58,7 @@ class LinearConstraints
         int N;                            /** Number of constraints.             */
         Matrix<T, Dynamic, Dynamic> A;    /** Matrix of constraint coefficients. */ 
         Matrix<T, Dynamic, 1>       b;    /** Matrix of constraint values.       */ 
-        Program nearest_L2;               /** Quadratic program for nearest-point queries. */
+        Program* nearest_L2;              /** Quadratic program for nearest-point queries. */
 
         /**
          * Update the internal nearest-point-by-L2-distance quadratic program
@@ -70,16 +70,16 @@ class LinearConstraints
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2.set_a(j, i, static_cast<double>(this->A(i, j)));
-                this->nearest_L2.set_b(i, static_cast<double>(this->b(i)));
-                this->nearest_L2.set_r(i, cgalInequalityType(this->type)); 
+                    this->nearest_L2->set_a(j, i, static_cast<double>(this->A(i, j)));
+                this->nearest_L2->set_b(i, static_cast<double>(this->b(i)));
+                this->nearest_L2->set_r(i, cgalInequalityType(this->type)); 
             }
             for (unsigned i = 0; i < this->D; ++i)
             {
-                this->nearest_L2.set_d(i, i, 2);
-                this->nearest_L2.set_c(i, 0);
+                this->nearest_L2->set_d(i, i, 2);
+                this->nearest_L2->set_c(i, 0);
             }
-            this->nearest_L2.set_c0(0);
+            this->nearest_L2->set_c0(0);
         }
 
         /**
@@ -154,13 +154,13 @@ class LinearConstraints
          * @param type Inequality type. 
          */
         LinearConstraints(const InequalityType type)
-            : nearest_L2(cgalInequalityType(type), false, 0.0, false, 0.0) 
         {
             this->type = type; 
             this->N = 0;
             this->D = 0;
             this->A = Matrix<T, Dynamic, Dynamic>::Zero(0, 0);
             this->b = Matrix<T, Dynamic, 1>::Zero(0);
+            this->nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
         }
 
         /**
@@ -174,7 +174,6 @@ class LinearConstraints
          */
         LinearConstraints(const InequalityType type, const int D, const T lower,
                           const T upper)
-            : nearest_L2(cgalInequalityType(type), false, 0.0, false, 0.0)  
         {
             // Each variable has two constraints, one specifying a lower bound
             // and another specifying an upper bound
@@ -202,6 +201,7 @@ class LinearConstraints
                     this->b(this->D + i) = -upper;
                 }
             }
+            this->nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
             this->updateNearestL2();
         } 
 
@@ -214,7 +214,6 @@ class LinearConstraints
          */
         LinearConstraints(const InequalityType type, const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
                           const Ref<const Matrix<T, Dynamic, 1> >& b)
-            : nearest_L2(cgalInequalityType(type), false, 0.0, false, 0.0) 
         {
             this->type = type; 
             this->A = A;
@@ -229,6 +228,7 @@ class LinearConstraints
                    << ") vs. " << this->b.size() << std::endl;
                 throw std::invalid_argument(ss.str());
             }
+            this->nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
             this->updateNearestL2();
         }
 
@@ -237,6 +237,7 @@ class LinearConstraints
          */
         ~LinearConstraints()
         {
+            delete this->nearest_L2; 
         }
 
         /**
@@ -447,8 +448,8 @@ class LinearConstraints
 
             // Otherwise, solve the quadratic program for the nearest point to x
             for (unsigned i = 0; i < this->D; ++i)
-                this->nearest_L2.set_c(i, -2.0 * static_cast<double>(x(i)));
-            Solution solution = CGAL::solve_quadratic_program(this->nearest_L2, ET());
+                this->nearest_L2->set_c(i, -2.0 * static_cast<double>(x(i)));
+            Solution solution = CGAL::solve_quadratic_program(*this->nearest_L2, ET());
             if (solution.is_infeasible())
                 throw std::runtime_error("Quadratic program is infeasible");
             else if (solution.is_unbounded())
