@@ -486,20 +486,20 @@ class LinearConstraints
                                                  const T c0)
         {
             // Instantiate the linear program ... 
-            Program program(CGAL::SMALLER, false, 0.0, false, 0.0);
+            Program* program = new Program(CGAL::SMALLER, false, 0.0, false, 0.0);
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i, static_cast<double>(this->A(i, j)));
-                program.set_b(i, static_cast<double>(this->b(i)));
-                program.set_r(i, cgalInequalityType(this->type)); 
+                    program->set_a(j, i, static_cast<double>(this->A(i, j)));
+                program->set_b(i, static_cast<double>(this->b(i)));
+                program->set_r(i, cgalInequalityType(this->type)); 
             }
             for (unsigned i = 0; i < this->D; ++i)
-                program.set_c(i, static_cast<double>(obj(i))); 
-            program.set_c0(static_cast<double>(c0));
+                program->set_c(i, static_cast<double>(obj(i))); 
+            program->set_c0(static_cast<double>(c0));
 
             // ... and (try to) solve it ... 
-            Solution solution = CGAL::solve_quadratic_program(program, ET());
+            Solution solution = CGAL::solve_quadratic_program(*program, ET());
             if (solution.is_infeasible())
                 throw std::runtime_error("Quadratic program is infeasible");
             else if (solution.is_unbounded())
@@ -515,6 +515,7 @@ class LinearConstraints
                 y(i) = static_cast<T>(CGAL::to_double(*it));
                 i++;
             }
+            delete program; 
             return y;
         }
 
@@ -528,20 +529,20 @@ class LinearConstraints
         bool isRedundant(const int k)
         {
             // Instantiate the linear program ...
-            Program program(CGAL::SMALLER, false, 0.0, false, 0.0);
+            Program* program = new Program(CGAL::SMALLER, false, 0.0, false, 0.0);
 
             // ... excluding the k-th constraint
             for (unsigned i = 0; i < k; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i, static_cast<double>(this->A(i, j)));
-                program.set_b(i, static_cast<double>(this->b(i)));
+                    program->set_a(j, i, static_cast<double>(this->A(i, j)));
+                program->set_b(i, static_cast<double>(this->b(i)));
             }
             for (unsigned i = k + 1; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program.set_a(j, i - 1, static_cast<double>(this->A(i, j)));
-                program.set_b(i - 1, static_cast<double>(this->b(i)));
+                    program->set_a(j, i - 1, static_cast<double>(this->A(i, j)));
+                program->set_b(i - 1, static_cast<double>(this->b(i)));
             }
 
             // If the constraints are >=, set the objective function to the
@@ -549,20 +550,20 @@ class LinearConstraints
             if (this->type == InequalityType::GreaterThanOrEqualTo)
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program.set_c(i, static_cast<double>(this->A(k, i)));
-                program.set_c0(-static_cast<double>(this->b(k))); 
+                    program->set_c(i, static_cast<double>(this->A(k, i)));
+                program->set_c0(-static_cast<double>(this->b(k))); 
             }
             // If the constraints are <=, set the objective function to the
             // *negative* of the k-th constraint
             else
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program.set_c(i, -static_cast<double>(this->A(k, i)));
-                program.set_c0(static_cast<double>(this->b(k)));  
+                    program->set_c(i, -static_cast<double>(this->A(k, i)));
+                program->set_c0(static_cast<double>(this->b(k)));  
             } 
 
             // Try to solve the program 
-            Solution solution = CGAL::solve_quadratic_program(program, ET());
+            Solution solution = CGAL::solve_quadratic_program(*program, ET());
 
             // If the solution is infeasible, then return false (*not redundant*)
             if (solution.is_infeasible() || solution.is_unbounded() || !solution.is_optimal())
@@ -570,6 +571,7 @@ class LinearConstraints
 
             // If the solution is feasible, then check that the objective function
             // evaluated at the solution is *non-negative*
+            delete program; 
             return (solution.objective_value() >= 0);  
         }
 
