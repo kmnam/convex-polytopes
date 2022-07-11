@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     4/26/2022
+ *     7/11/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -122,7 +122,14 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
          */
         void parse(const std::string filename)
         {
-            this->__parse(filename, this->type);
+            try
+            {
+                this->__parse(filename, this->type);
+            }
+            catch (const std::invalid_argument& e)
+            {
+                throw; 
+            }
             this->removeRedundantConstraints();
         }
 
@@ -132,11 +139,20 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
          * redundant constraints, and overwrite the dictionary system. 
          *
          * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type (not denoted in the file). 
+         * @param type     Inequality type of the constraints in the file. 
+         *                 (If `type` does not match `this->type`, then the
+         *                 constraints are converted to `this->type`.)
          */
         void parse(const std::string filename, const InequalityType type)
         {
-            this->__parse(filename, type); 
+            try
+            {
+                this->__parse(filename, type);
+            }
+            catch (const std::invalid_argument& e)
+            {
+                throw; 
+            }
             this->removeRedundantConstraints(); 
         }
 
@@ -356,7 +372,7 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
          */
         HyperplaneArrangement()
             : DictionarySystem(),
-              LinearConstraints<mpq_rational>(Polytopes::InequalityType::IsEqualTo) 
+              LinearConstraints<mpq_rational>(InequalityType::IsEqualTo) 
         {
             this->updateCore(); 
             this->updateDictCoefs();
@@ -371,7 +387,7 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
          */
         HyperplaneArrangement(const Ref<const MatrixXr>& A, const Ref<const VectorXr>& b)
             : DictionarySystem(),
-              LinearConstraints<mpq_rational>(Polytopes::InequalityType::IsEqualTo, A, b) 
+              LinearConstraints<mpq_rational>(InequalityType::IsEqualTo, A, b) 
         {
             this->updateCore(); 
             this->updateDictCoefs();
@@ -394,7 +410,14 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
          */
         void parse(const std::string filename)
         {
-            this->__parse(filename, Polytopes::InequalityType::IsEqualTo);
+            try
+            {
+                this->__parse(filename, InequalityType::IsEqualTo);
+            }
+            catch (const std::invalid_argument& e)
+            {
+                throw; 
+            }
             this->removeRedundantConstraints();
         }
 
