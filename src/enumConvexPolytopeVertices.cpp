@@ -26,14 +26,24 @@ int main(int argc, char** argv)
 
     // ... and instantiate the corresponding polyhedral dictionary system 
     PolyhedralDictionarySystem* dict = new PolyhedralDictionarySystem(InequalityType::LessThanOrEqualTo);
-    if (argc == 3 && !strcmp("--geq"))
-        dict->parse(filename, InequalityType::GreaterThanOrEqualTo); 
-    else if (argc == 2) 
+    if (argc == 3)
+    {
+        std::string arg = argv[2];
+        if (arg == "--geq") 
+            dict->parse(filename, InequalityType::GreaterThanOrEqualTo);
+        else 
+            throw std::runtime_error("Invalid call signature"); 
+    } 
+    else if (argc == 2)
+    { 
         dict->parse(filename);
+    }
     else
-        throw std::runtime_error("Invalid call signature"); 
+    {
+        throw std::runtime_error("Invalid call signature");
+    }
      
-    // Print the enumerated vertices to stdout 
+    // Print the enumerated vertices to stdout
     Matrix<mpq_rational, Dynamic, Dynamic> vertices = dict->enumVertices(); 
     std::cout << vertices << std::endl;  
 
