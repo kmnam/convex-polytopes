@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     5/8/2022
+ *     7/11/2022
  */
 
 #include <iostream>
@@ -26,7 +26,12 @@ int main(int argc, char** argv)
 
     // ... and instantiate the corresponding polyhedral dictionary system 
     PolyhedralDictionarySystem* dict = new PolyhedralDictionarySystem(InequalityType::LessThanOrEqualTo);
-    dict->parse(filename);  
+    if (argc == 3 && !strcmp("--geq"))
+        dict->parse(filename, InequalityType::GreaterThanOrEqualTo); 
+    else if (argc == 2) 
+        dict->parse(filename);
+    else
+        throw std::runtime_error("Invalid call signature"); 
      
     // Print the enumerated vertices to stdout 
     Matrix<mpq_rational, Dynamic, Dynamic> vertices = dict->enumVertices(); 

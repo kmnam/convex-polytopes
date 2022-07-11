@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     5/12/2022
+ *     7/11/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -90,7 +90,9 @@ class LinearConstraints
          * `parse(filename, type)`. 
          *
          * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type (not denoted in the file).
+         * @param type     Inequality type of the constraints in the file. 
+         *                 (If `type` does not match `this->type`, then the
+         *                 constraints are converted to `this->type`.)
          */
         void __parse(const std::string filename, const InequalityType type)
         {
@@ -130,16 +132,24 @@ class LinearConstraints
                     //
                     A.conservativeResize(N, D);
                     b.conservativeResize(N);
-                    for (unsigned i = 1; i < row.size(); ++i)
-                        A(N-1, i-1) = row[i];
-                    b(N-1) = -row[0];
+                    if (type != this->type)
+                    {
+                        for (unsigned i = 1; i < row.size(); ++i)
+                            A(N-1, i-1) = -row[i];
+                        b(N-1) = row[0];
+                    }
+                    else 
+                    {
+                        for (unsigned i = 1; i < row.size(); ++i)
+                            A(N-1, i-1) = row[i]; 
+                        b(N-1) = -row[0];
+                    }
                 }
                 infile.close();
             }
             else
                 throw std::invalid_argument("Specified file does not exist");
 
-            this->type = type; 
             this->A = A;
             this->b = b;
             this->N = N;
@@ -305,7 +315,14 @@ class LinearConstraints
          */
         void parse(const std::string filename)
         {
-            this->__parse(filename, this->type); 
+            try
+            {
+                this->__parse(filename, this->type);
+            }
+            catch (const std::invalid_argument& e) 
+            {
+                throw; 
+            }
         }
 
         /**
@@ -313,11 +330,20 @@ class LinearConstraints
          * (inequalities), read in the constraint matrix and vector.
          *
          * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type (not denoted in the file).
+         * @param type     Inequality type of the constraints in the file. 
+         *                 (If `type` does not match `this->type`, then the
+         *                 constraints are converted to `this->type`.)
          */
         void parse(const std::string filename, const InequalityType type)
         {
-            this->__parse(filename, type); 
+            try
+            {
+                this->__parse(filename, type);
+            }
+            catch (const std::invalid_argument& e)
+            {
+                throw; 
+            }
         }
 
         /**
@@ -522,57 +548,94 @@ class LinearConstraints
         /**
          * Determine whether the `k`-th stored constraint is redundant.
          *
+         * This is determined here by setting up the linear program excluding
+         * the `k`-th constraint with the objective function set to the 
+         * (right-hand-side of the) constraint. If the constraint is redundant,
+         * then the optimal objective value should satisfy the constraint.
+         *
+         * More specifically, if the original constraints are >=, then we 
+         * try to *minimize* the `k`-th constraint subject to the others; if 
+         * the original constraints are <=, then we try to *maximize* the `k`-th
+         * constraint subject to the others.  
+         *
          * @param k Index (`0 <= k <= this->N - 1`) of constraint to be tested
          *          for redundancy. 
          * @returns True if the constraint is redundant, false otherwise.   
          */
         bool isRedundant(const int k)
         {
-            // Instantiate the linear program ...
-            Program* program = new Program(CGAL::SMALLER, false, 0.0, false, 0.0);
-
-            // ... excluding the k-th constraint
-            for (unsigned i = 0; i < k; ++i)
+            // ----------------------------------------------------------- //
+            // Checking feasibility of the original constraints ...        //
+            // ----------------------------------------------------------- //
+            // Instantiate the linear program with all constraints included ... 
+            Program* program = new Program(cgalInequalityType(this->type), false, 0.0, false, 0.0);
+            for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
                     program->set_a(j, i, static_cast<double>(this->A(i, j)));
                 program->set_b(i, static_cast<double>(this->b(i)));
             }
+            
+            // ... and with zero objective function 
+            for (unsigned i = 0; i < this->D; ++i)
+                program->set_c(i, 0); 
+            program->set_c0(0);
+
+            // Solve the linear program and check that the program is feasible 
+            // to begin with 
+            Solution solution = CGAL::solve_quadratic_program(*program, ET());
+            delete program; 
+            if (solution.is_infeasible())
+                return false; 
+
+            // ----------------------------------------------------------- //
+            // Checking redundancy of the k-th constraint ...
+            // ----------------------------------------------------------- // 
+            // Now instantiate the linear program with the k-th constraint excluded
+            Program* subprogram = new Program(cgalInequalityType(this->type), false, 0.0, false, 0.0); 
+            for (unsigned i = 0; i < k; ++i)
+            {
+                for (unsigned j = 0; j < this->D; ++j)
+                    subprogram->set_a(j, i, static_cast<double>(this->A(i, j)));
+                subprogram->set_b(i, static_cast<double>(this->b(i)));
+            }
             for (unsigned i = k + 1; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    program->set_a(j, i - 1, static_cast<double>(this->A(i, j)));
-                program->set_b(i - 1, static_cast<double>(this->b(i)));
+                    subprogram->set_a(j, i - 1, static_cast<double>(this->A(i, j)));
+                subprogram->set_b(i - 1, static_cast<double>(this->b(i)));
             }
 
             // If the constraints are >=, set the objective function to the
-            // k-th constraint  
+            // k-th constraint and minimize 
+            bool is_redundant = false; 
             if (this->type == InequalityType::GreaterThanOrEqualTo)
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program->set_c(i, static_cast<double>(this->A(k, i)));
-                program->set_c0(-static_cast<double>(this->b(k))); 
+                    subprogram->set_c(i, static_cast<double>(this->A(k, i)));
+                subprogram->set_c0(0);
+                solution = CGAL::solve_quadratic_program(*subprogram, ET());
+                is_redundant = (
+                    !solution.is_infeasible() && solution.is_optimal() &&
+                    solution.objective_value() >= static_cast<double>(this->b(k))
+                ); 
             }
             // If the constraints are <=, set the objective function to the
-            // *negative* of the k-th constraint
+            // *negative* of the k-th constraint and minimize
             else
             {
                 for (unsigned i = 0; i < this->D; ++i)
-                    program->set_c(i, -static_cast<double>(this->A(k, i)));
-                program->set_c0(static_cast<double>(this->b(k)));  
-            } 
-
-            // Try to solve the program 
-            Solution solution = CGAL::solve_quadratic_program(*program, ET());
-
-            // If the solution is infeasible, then return false (*not redundant*)
-            if (solution.is_infeasible() || solution.is_unbounded() || !solution.is_optimal())
-                return false; 
-
-            // If the solution is feasible, then check that the objective function
-            // evaluated at the solution is *non-negative*
-            delete program; 
-            return (solution.objective_value() >= 0);  
+                    subprogram->set_c(i, -static_cast<double>(this->A(k, i)));
+                subprogram->set_c0(0);
+                solution = CGAL::solve_quadratic_program(*subprogram, ET());
+                is_redundant = (
+                    !solution.is_infeasible() && solution.is_optimal() &&
+                    solution.objective_value() >= static_cast<double>(-this->b(k))
+                ); 
+            }
+            
+            delete subprogram;
+            return is_redundant;  
         }
 
         /**
