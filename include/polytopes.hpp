@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     5/4/2022
+ *     7/18/2022
  */
 
 #ifndef POLYTOPES_HPP 
@@ -89,7 +89,7 @@ class Simplex
         /**
          * Return the i-th vertex in the simplex as a (column) vector. 
          */
-        Matrix<mpq_rational, Dynamic, 1> getVertex(const unsigned i) 
+        Matrix<mpq_rational, Dynamic, 1> getVertex(const int i) 
         {
             return this->vertices.row(i); 
         }
@@ -115,9 +115,9 @@ class Simplex
             // Compute the symmetric distance matrix ...
             int nv = this->vertices.rows(); 
             Matrix<mpq_rational, Dynamic, Dynamic> A = Matrix<mpq_rational, Dynamic, Dynamic>::Zero(nv + 1, nv + 1); 
-            for (unsigned j = 0; j < nv; ++j)
+            for (int j = 0; j < nv; ++j)
             {
-                for (unsigned k = j + 1; k < nv; ++k) 
+                for (int k = j + 1; k < nv; ++k) 
                 {
                     mpq_rational sqdist = (this->vertices.row(j) - this->vertices.row(k)).squaredNorm(); 
                     A(j, k) = sqdist; 
@@ -145,10 +145,10 @@ class Simplex
          * @returns        Matrix of sampled point coordinates. 
          */
         template <int FloatPrecision>
-        Matrix<number<mpfr_float_backend<FloatPrecision> >, Dynamic, Dynamic> sample(unsigned npoints, boost::random::mt19937& rng)
+        Matrix<number<mpfr_float_backend<FloatPrecision> >, Dynamic, Dynamic> sample(int npoints, boost::random::mt19937& rng)
         {
-            unsigned dim = this->vertices.cols();     // Dimension of the ambient space
-            unsigned nv = this->vertices.rows();      // Number of vertices
+            int dim = this->vertices.cols();     // Dimension of the ambient space
+            int nv = this->vertices.rows();      // Number of vertices
 
             // Sample the desired number of points from the flat Dirichlet 
             // distribution on the standard simplex of appropriate dimension
@@ -156,18 +156,18 @@ class Simplex
             // This sampling is performed with double scalars 
             MatrixXd barycentric(npoints, nv); 
             boost::random::gamma_distribution<double> gamma_dist(1.0);
-            for (unsigned i = 0; i < npoints; ++i)
+            for (int i = 0; i < npoints; ++i)
             {
                 // Sample (nv) independent Gamma-distributed variables with alpha = 1,
                 // and normalize by their sum
-                for (unsigned j = 0; j < nv; ++j)
+                for (int j = 0; j < nv; ++j)
                     barycentric(i, j) = gamma_dist(rng);
                 barycentric.row(i) = barycentric.row(i) / barycentric.row(i).sum();
             }
            
             // Convert from barycentric coordinates to Cartesian coordinates
             Matrix<number<mpfr_float_backend<FloatPrecision> >, Dynamic, Dynamic> points(npoints, dim); 
-            for (unsigned i = 0; i < npoints; ++i)
+            for (int i = 0; i < npoints; ++i)
             {
                 points.row(i) = (
                     barycentric.row(i).template cast<mpq_rational>() * this->vertices
@@ -237,7 +237,7 @@ std::vector<std::vector<int> > combinations(const std::vector<int>& v, const int
     }
     else 
     {
-        for (unsigned i = 0; i < v.size(); ++i)
+        for (int i = 0; i < v.size(); ++i)
         {
             // Here, we are gathering all combinations containing the i-th
             // item and no previous items 
@@ -281,11 +281,11 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri)
         Matrix<mpq_rational, Dynamic, Dynamic> face_vertex_coords(dim + 1, dim);
         
         // For each vertex in the face ...
-        for (unsigned i = 0; i < dim + 1; ++i)
+        for (int i = 0; i < dim + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
-            for (unsigned j = 0; j < dim; ++j)
+            for (int j = 0; j < dim; ++j)
                 face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
         }
         faces.emplace_back(Simplex(face_vertex_coords));
@@ -313,11 +313,11 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation* tri)
         Matrix<mpq_rational, Dynamic, Dynamic> face_vertex_coords(dim + 1, dim);
         
         // For each vertex in the face ...
-        for (unsigned i = 0; i < dim + 1; ++i)
+        for (int i = 0; i < dim + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
-            for (unsigned j = 0; j < dim; ++j)
+            for (int j = 0; j < dim; ++j)
                 face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
         }
         faces.emplace_back(Simplex(face_vertex_coords));
@@ -357,18 +357,18 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation& tri)
 
         // The vertices of the facet are the vertex of the simplex minus the 
         // co-vertex 
-        for (unsigned i = 0; i < j; ++i)
+        for (int i = 0; i < j; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
-            for (unsigned k = 0; k < dim; ++k)
+            for (int k = 0; k < dim; ++k)
                 facet_vertex_coords(i, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
-        for (unsigned i = j + 1; i < tri.current_dimension() + 1; ++i)
+        for (int i = j + 1; i < tri.current_dimension() + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
-            for (unsigned k = 0; k < dim; ++k)
+            for (int k = 0; k < dim; ++k)
                 facet_vertex_coords(i - 1, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
 
@@ -409,18 +409,18 @@ std::vector<Simplex> getBoundaryFacets(Delaunay_triangulation* tri)
 
         // The vertices of the facet are the vertex of the simplex minus the 
         // co-vertex 
-        for (unsigned i = 0; i < j; ++i)
+        for (int i = 0; i < j; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
-            for (unsigned k = 0; k < dim; ++k)
+            for (int k = 0; k < dim; ++k)
                 facet_vertex_coords(i, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
-        for (unsigned i = j + 1; i < tri->current_dimension() + 1; ++i)
+        for (int i = j + 1; i < tri->current_dimension() + 1; ++i)
         {
             // Get the coordinates of the i-th vertex 
             Point p = c->vertex(i)->point();
-            for (unsigned k = 0; k < dim; ++k)
+            for (int k = 0; k < dim; ++k)
                 facet_vertex_coords(i - 1, k) = static_cast<mpq_rational>(CGAL::to_double(p[k]));  
         } 
 
@@ -473,7 +473,7 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation& tri, const int cod
         {
             // Get the coordinates of each vertex
             Point p = it->point(); 
-            for (unsigned j = 0; j < tri_dim; ++j) 
+            for (int j = 0; j < tri_dim; ++j) 
                 all_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));
             i++;  
         }
@@ -487,7 +487,7 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation& tri, const int cod
         // Get the indices of the vertices of the facet, as dictated by the 
         // matrix of vertex coordinates for the full triangulation 
         std::vector<int> vertex_indices_in_facet;
-        for (unsigned i = 0; i < tri_dim; ++i)
+        for (int i = 0; i < tri_dim; ++i)
         {
             Matrix<mpq_rational, Dynamic, 1> v = f.getVertex(i);
             Matrix<mpq_rational, Dynamic, 1>::Index nearest;
@@ -565,7 +565,7 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation* tri, const int cod
         {
             // Get the coordinates of each vertex
             Point p = it->point(); 
-            for (unsigned j = 0; j < tri_dim; ++j) 
+            for (int j = 0; j < tri_dim; ++j) 
                 all_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));
             i++;  
         }
@@ -579,7 +579,7 @@ std::vector<Simplex> getBoundaryFaces(Delaunay_triangulation* tri, const int cod
         // Get the indices of the vertices of the facet, as dictated by the 
         // matrix of vertex coordinates for the full triangulation 
         std::vector<int> vertex_indices_in_facet;
-        for (unsigned i = 0; i < tri_dim; ++i)
+        for (int i = 0; i < tri_dim; ++i)
         {
             Matrix<mpq_rational, Dynamic, 1> v = f.getVertex(i);
             Matrix<mpq_rational, Dynamic, 1>::Index nearest;
@@ -632,7 +632,7 @@ Delaunay_triangulation triangulate(const Ref<const Matrix<mpq_rational, Dynamic,
 
     // Instantiate the Delaunay triangulation and insert each vertex 
     Delaunay_triangulation tri(dim);
-    for (unsigned i = 0; i < _vertices.rows(); ++i) 
+    for (int i = 0; i < _vertices.rows(); ++i) 
         tri.insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
 
     return tri; 
@@ -660,7 +660,7 @@ Delaunay_triangulation& triangulate(const Ref<const Matrix<mpq_rational, Dynamic
     tri.clear(); 
 
     // Add each new vertex into the triangulation 
-    for (unsigned i = 0; i < _vertices.rows(); ++i) 
+    for (int i = 0; i < _vertices.rows(); ++i) 
         tri.insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
 
     return tri; 
@@ -689,7 +689,7 @@ void triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& verti
     tri->clear(); 
 
     // Add each new vertex into the triangulation 
-    for (unsigned i = 0; i < _vertices.rows(); ++i) 
+    for (int i = 0; i < _vertices.rows(); ++i) 
         tri->insert(Point(dim, _vertices.row(i).begin(), _vertices.row(i).end())); 
 }
 
@@ -884,7 +884,7 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
     // Compute the (scaled) volume of each face 
     int dim = tri.current_dimension();
     Matrix<number<mpfr_float_backend<CayleyMengerPrecision> >, Dynamic, 1> volumes(faces.size()); 
-    for (unsigned i = 0; i < faces.size(); ++i) 
+    for (int i = 0; i < faces.size(); ++i) 
         volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>();
 
     // Instantiate a categorical distribution with probabilities 
@@ -894,7 +894,7 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation& tri, const int npoints
     // arithmetic  
     VectorXd probs = (volumes / volumes.sum()).template cast<double>();
     std::vector<double> probs_vec; 
-    for (unsigned i = 0; i < probs.size(); ++i)
+    for (int i = 0; i < probs.size(); ++i)
         probs_vec.push_back(probs(i));
     boost::random::discrete_distribution<> dist(probs_vec);
 
@@ -947,7 +947,7 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation* tri, const int npoints
     // Compute the (scaled) volume of each face 
     int dim = tri->current_dimension();
     Matrix<number<mpfr_float_backend<CayleyMengerPrecision> >, Dynamic, 1> volumes(faces.size()); 
-    for (unsigned i = 0; i < faces.size(); ++i) 
+    for (int i = 0; i < faces.size(); ++i) 
         volumes(i) = faces[i].sqrtAbsCayleyMenger<CayleyMengerPrecision>();
 
     // Instantiate a categorical distribution with probabilities 
@@ -957,7 +957,7 @@ MatrixXd sampleFromConvexPolytope(Delaunay_triangulation* tri, const int npoints
     // arithmetic  
     VectorXd probs = (volumes / volumes.sum()).template cast<double>();
     std::vector<double> probs_vec; 
-    for (unsigned i = 0; i < probs.size(); ++i)
+    for (int i = 0; i < probs.size(); ++i)
         probs_vec.push_back(probs(i));
     boost::random::discrete_distribution<> dist(probs_vec);
 
