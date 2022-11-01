@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     7/11/2022
+ *     11/1/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -172,7 +172,7 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
                 this->type = InequalityType::GreaterThanOrEqualTo; 
             this->A *= -1; 
             this->b *= -1; 
-            this->updateNearestL2(); 
+            this->updateApproxNearestL2(); 
             this->updateCore();
             this->updateDictCoefs(); 
             this->updateBasicSolution(); 
@@ -201,7 +201,7 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
                     i++; 
                 }
             }
-            this->updateNearestL2(); 
+            this->updateApproxNearestL2(); 
             this->updateCore(); 
             this->updateDictCoefs(); 
             this->updateBasicSolution(); 
