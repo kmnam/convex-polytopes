@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     7/11/2022
+ *     11/1/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -58,28 +58,28 @@ class LinearConstraints
         int N;                            /** Number of constraints.             */
         Matrix<T, Dynamic, Dynamic> A;    /** Matrix of constraint coefficients. */ 
         Matrix<T, Dynamic, 1>       b;    /** Matrix of constraint values.       */ 
-        Program* nearest_L2;              /** Quadratic program for nearest-point queries. */
+        Program* approx_nearest_L2;       /** Quadratic program for approximate nearest-point queries. */
 
         /**
          * Update the internal nearest-point-by-L2-distance quadratic program
          * with coefficients given by the current constraint matrix and vector. 
          */
-        void updateNearestL2()
+        void updateApproxNearestL2()
         {
             // Convert all coefficients to double scalars 
             for (unsigned i = 0; i < this->N; ++i)
             {
                 for (unsigned j = 0; j < this->D; ++j)
-                    this->nearest_L2->set_a(j, i, static_cast<double>(this->A(i, j)));
-                this->nearest_L2->set_b(i, static_cast<double>(this->b(i)));
-                this->nearest_L2->set_r(i, cgalInequalityType(this->type)); 
+                    this->approx_nearest_L2->set_a(j, i, static_cast<double>(this->A(i, j)));
+                this->approx_nearest_L2->set_b(i, static_cast<double>(this->b(i)));
+                this->approx_nearest_L2->set_r(i, cgalInequalityType(this->type)); 
             }
             for (unsigned i = 0; i < this->D; ++i)
             {
-                this->nearest_L2->set_d(i, i, 2);
-                this->nearest_L2->set_c(i, 0);
+                this->approx_nearest_L2->set_d(i, i, 2);
+                this->approx_nearest_L2->set_c(i, 0);
             }
-            this->nearest_L2->set_c0(0);
+            this->approx_nearest_L2->set_c0(0);
         }
 
         /**
@@ -170,7 +170,7 @@ class LinearConstraints
             this->D = 0;
             this->A = Matrix<T, Dynamic, Dynamic>::Zero(0, 0);
             this->b = Matrix<T, Dynamic, 1>::Zero(0);
-            this->nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
+            this->approx_nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
         }
 
         /**
@@ -211,7 +211,7 @@ class LinearConstraints
                     this->b(this->D + i) = -upper;
                 }
             }
-            this->nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
+            this->approx_nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
             this->updateNearestL2();
         } 
 
@@ -238,7 +238,7 @@ class LinearConstraints
                    << ") vs. " << this->b.size() << std::endl;
                 throw std::invalid_argument(ss.str());
             }
-            this->nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
+            this->approx_nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
             this->updateNearestL2();
         }
 
@@ -247,7 +247,7 @@ class LinearConstraints
          */
         ~LinearConstraints()
         {
-            delete this->nearest_L2; 
+            delete this->approx_nearest_L2; 
         }
 
         /**
@@ -450,8 +450,9 @@ class LinearConstraints
         }
 
         /**
-         * Return the nearest point to the given query vector, with respect 
-         * to L2 (Euclidean) distance, that satisfies the constraints.
+         * Return the approximate nearest point to the given query vector,
+         * with respect to L2 (Euclidean) distance, that satisfies the
+         * constraints.
          *
          * Note that, while the returned vector has scalar type `T`, the 
          * nearest-point quadratic program is solved with double-precision
@@ -463,10 +464,11 @@ class LinearConstraints
          * program.
          * 
          * @param x Query vector. 
-         * @returns Vector nearest to query that satisfies the constraints.  
+         * @returns Vector approximately nearest to query that satisfies the
+         *          constraints.  
          */
         template <typename U>
-        Matrix<T, Dynamic, 1> nearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
+        Matrix<T, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
         {
             // First check that x itself satisfies the constraints
             Matrix<T, Dynamic, 1> x_ = x.template cast<T>(); 
@@ -474,8 +476,8 @@ class LinearConstraints
 
             // Otherwise, solve the quadratic program for the nearest point to x
             for (unsigned i = 0; i < this->D; ++i)
-                this->nearest_L2->set_c(i, -2.0 * static_cast<double>(x(i)));
-            Solution solution = CGAL::solve_quadratic_program(*this->nearest_L2, ET());
+                this->approx_nearest_L2->set_c(i, -2.0 * static_cast<double>(x(i)));
+            Solution solution = CGAL::solve_quadratic_program(*this->approx_nearest_L2, ET());
             if (solution.is_infeasible())
                 throw std::runtime_error("Quadratic program is infeasible");
             else if (solution.is_unbounded())
