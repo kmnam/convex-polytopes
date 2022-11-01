@@ -154,7 +154,7 @@ class LinearConstraints
             this->b = b;
             this->N = N;
             this->D = D;
-            this->updateNearestL2();
+            this->updateApproxNearestL2();
         }
 
     public:
@@ -212,7 +212,7 @@ class LinearConstraints
                 }
             }
             this->approx_nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
-            this->updateNearestL2();
+            this->updateApproxNearestL2();
         } 
 
         /**
@@ -239,7 +239,7 @@ class LinearConstraints
                 throw std::invalid_argument(ss.str());
             }
             this->approx_nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
-            this->updateNearestL2();
+            this->updateApproxNearestL2();
         }
 
         /**
@@ -262,7 +262,7 @@ class LinearConstraints
         void setInequalityType(const InequalityType type) 
         {
             this->type = type;
-            this->updateNearestL2(); 
+            this->updateApproxNearestL2(); 
         }
 
         /**
@@ -280,7 +280,7 @@ class LinearConstraints
             this->A *= -1; 
             this->b *= -1; 
             this->type = type;
-            this->updateNearestL2(); 
+            this->updateApproxNearestL2(); 
         }
 
         /**
@@ -304,7 +304,7 @@ class LinearConstraints
                    << ") vs. " << this->b.size() << std::endl;
                 throw std::invalid_argument(ss.str());
             }
-            this->updateNearestL2(); 
+            this->updateApproxNearestL2(); 
         }
 
         /**
@@ -662,7 +662,7 @@ class LinearConstraints
                     i++; 
                 }
             }
-            this->updateNearestL2(); 
+            this->updateApproxNearestL2(); 
         }
 };
 
