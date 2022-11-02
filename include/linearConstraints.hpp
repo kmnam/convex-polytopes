@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/1/2022
+ *     11/2/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -446,7 +446,7 @@ class LinearConstraints
                    << ") vs. " << x.size() << std::endl;
                 throw std::invalid_argument(ss.str());
             }
-            return ((this->A * x).array() == (this->b).array());
+            return ((this->A * x).array() == (this->b).array()).matrix();
         }
 
         /**
