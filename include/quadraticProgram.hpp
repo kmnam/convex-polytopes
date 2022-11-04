@@ -70,8 +70,9 @@ Matrix<T, Dynamic, 1> solveEqualityConstrainedConvexQuadraticProgram(const Ref<c
  * @param x_init   Initial iterate (must satisfy constraints).
  * @param tol      Tolerance for assessing whether a stepsize is zero.
  * @param max_iter Maximum number of iterations.
- * @returns        Solution vector, together with indicator of whether algorithm
- *                 terminated within given maximum number of iterations.  
+ * @returns        Solution vector (including the associated Lagrange multipliers),
+ *                 together with indicator of whether algorithm terminated
+ *                 within given maximum number of iterations.  
  * @throws std::runtime_error If `G` is not positive semidefinite.
  */
 template <typename T>
@@ -97,7 +98,7 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
     int nw = working.count();
 
     // Run main loop ... 
-    Matrix<T, Dynamic, 1> solution, bk, gk, lk, sk;
+    Matrix<T, Dynamic, 1> solution(D + N), bk, gk, lk, sk;
     Matrix<T, Dynamic, Dynamic> Ak; 
     for (int k = 0; k < max_iter; ++k)
     {
@@ -124,12 +125,23 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
             // Eq. 16.42)
             lk = Ak.transpose().fullPivLu().solve(gk);
 
-            // If all Lagrange multipliers are non-negative among all active 
-            // constraints, then the current iterate is in fact a solution 
-            // to the main QP 
+            // If all Lagrange multipliers are non-negative among all working
+            // active constraints, then the current iterate is in fact a
+            // solution to the main QP 
             if ((lk.array() >= 0).all())
             {
-                return std::make_pair(xk, true);
+                solution.head(D) = xk;
+                solution.tail(N) = Matrix<T, Dynamic, 1>::Zero(N);
+                i = 0; 
+                for (int j = 0; j < N; ++j)
+                {
+                    if (working(j))
+                    {
+                        solution(D + j) = lk(i); 
+                        i++;
+                    }
+                }
+                return std::make_pair(solution, true);
             }
             // Otherwise, find the least constraint index for which the Lagrange
             // multiplier is smallest (most negative) and *remove* this constraint
@@ -204,7 +216,18 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
         }
     }
 
-    return std::make_pair(xk, false);
+    solution.head(D) = xk;
+    solution.tail(N) = Matrix<T, Dynamic, 1>::Zero(N);
+    i = 0; 
+    for (int j = 0; j < N; ++j)
+    {
+        if (working(j))
+        {
+            solution(D + j) = lk(i); 
+            i++;
+        }
+    }
+    return std::make_pair(solution, false);
 }
 
 #endif
