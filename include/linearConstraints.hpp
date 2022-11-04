@@ -528,10 +528,16 @@ class LinearConstraints
             Matrix<U, Dynamic, 1> b_ = (this->b).template cast<U>();
             Matrix<U, Dynamic, 1> x_init_ = x_init.template cast<U>();
             auto result = solveConvexQuadraticProgram<U>(G, c, A_, b_, x_init_, tol, max_iter);
-            if (result.second)
-                throw std::runtime_error("Quadratic program did not return optimal solution");
+            if (!result.second)
+            if (!result.second)
+            {
+                std::stringstream ss;
+                ss << "Quadratic program did not converge within given maximum"
+                      "number of iterations (" << max_iter << ")" << std::endl;
+                throw std::runtime_error(ss.str()); 
+            }
             
-            return result.first;
+            return result.first.head(this->D);
         }
 
         /**
