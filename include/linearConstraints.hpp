@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/2/2022
+ *     11/4/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_HPP
@@ -20,6 +20,7 @@
 #include <CGAL/QP_models.h>
 #include <CGAL/QP_functions.h>
 #include <CGAL/Gmpzf.h>
+#include "quadraticProgram.hpp"
 
 using namespace Eigen;
 typedef CGAL::Gmpzf ET;
@@ -222,7 +223,8 @@ class LinearConstraints
          * @param A    Left-hand matrix in the constraints.
          * @param b    Right-hand vector in the constraints.  
          */
-        LinearConstraints(const InequalityType type, const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
+        LinearConstraints(const InequalityType type,
+                          const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
                           const Ref<const Matrix<T, Dynamic, 1> >& b)
         {
             this->type = type; 
@@ -454,14 +456,8 @@ class LinearConstraints
          * with respect to L2 (Euclidean) distance, that satisfies the
          * constraints.
          *
-         * Note that, while the returned vector has scalar type `T`, the 
-         * nearest-point quadratic program is solved with double-precision
-         * arithmetic, meaning that the returned vector may be slightly
-         * inaccurate.
-         *
-         * The input vector may have scalar type other than `T` or double,
-         * but its coordinates are converted to doubles for the quadratic
-         * program.
+         * The input vector may have scalar type other than `T`, and the 
+         * output has type `T`.
          * 
          * @param x Query vector. 
          * @returns Vector approximately nearest to query that satisfies the
@@ -471,10 +467,11 @@ class LinearConstraints
         Matrix<T, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
         {
             // First check that x itself satisfies the constraints
-            Matrix<T, Dynamic, 1> x_ = x.template cast<T>(); 
+            Matrix<T, Dynamic, 1> x_ = x.template cast<T>();
             if (this->query(x_)) return x_;
 
             // Otherwise, solve the quadratic program for the nearest point to x
+            // (Must update linear part of objective)
             for (unsigned i = 0; i < this->D; ++i)
                 this->approx_nearest_L2->set_c(i, -2.0 * static_cast<double>(x(i)));
             Solution solution = CGAL::solve_quadratic_program(*this->approx_nearest_L2, ET());
@@ -494,6 +491,47 @@ class LinearConstraints
                 i++;
             }
             return y;
+        }
+
+        /**
+         * Return the approximate nearest point to the given query vector,
+         * with respect to L2 (Euclidean) distance, that satisfies the
+         * constraints.
+         *
+         * The input vector may have scalar type `U` other than `T`, and the 
+         * output has type `U` as well.
+         * 
+         * @param x        Query vector.
+         * @param x_init   "Initial" vector that satisfies constraints. 
+         * @param tol      Tolerance for assessing whether a stepsize is zero.
+         * @param max_iter Maximum number of iterations when solving the
+         *                 quadratic program.
+         * @returns Vector approximately nearest to query that satisfies the
+         *          constraints.  
+         */
+        template <typename U>
+        Matrix<U, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x,
+                                              const Ref<const Matrix<T, Dynamic, 1> >& x_init,
+                                              const U tol, const int max_iter)
+        {
+            // First check that x itself satisfies the constraints
+            Matrix<T, Dynamic, 1> x_ = x.template cast<T>();
+            if (this->query(x_)) return x_;
+
+            // Otherwise, solve the quadratic program for the nearest point to x
+            // (Must update linear part of objective)
+            //
+            // The calculations are performed with type U, not T
+            Matrix<U, Dynamic, Dynamic> G = 2 * Matrix<U, Dynamic, Dynamic>::Identity(this->D, this->D); 
+            Matrix<U, Dynamic, 1> c = -2 * x; 
+            Matrix<U, Dynamic, Dynamic> A_ = (this->A).cast<U>();
+            Matrix<U, Dynamic, 1> b_ = (this->b).cast<U>();
+            Matrix<U, Dynamic, 1> x_init_ = x_init.cast<U>();
+            auto result = solveConvexQuadraticProgram<U>(G, c, A_, b_, x_init_, tol, max_iter);
+            if (result.second)
+                throw std::runtime_error("Quadratic program did not return optimal solution");
+            
+            return result.first;
         }
 
         /**
