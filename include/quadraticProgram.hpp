@@ -6,15 +6,14 @@
  *     Kee-Myoung Nam
  *
  * **Last updated:**
- *     11/2/2022
+ *     11/4/2022
  */
 
 #ifndef LINEAR_QUADRATIC_PROGRAMMING_SOLVER_HPP
 #define LINEAR_QUADRATIC_PROGRAMMING_SOLVER_HPP
 
 #include <iostream>
-#include <cmath>
-#include "linearConstraints.hpp"
+#include <Eigen/Dense>
 
 using namespace Eigen; 
 
@@ -26,8 +25,8 @@ using namespace Eigen;
  * This function assumes that `G` is positive semidefinite, and that the
  * dimensions of `G`, `c`, `A`, and `b` match.
  *
- * @param G Symmetric matrix in quadratic program.
- * @param c Vector in quadratic program.
+ * @param G Symmetric matrix in quadratic objective.
+ * @param c Vector in linear part of objective.
  * @param A Left-hand constraint matrix.
  * @param b Right-hand constraint vector. 
  */
@@ -62,53 +61,49 @@ Matrix<T, Dynamic, 1> solveEqualityConstrainedConvexQuadraticProgram(const Ref<c
 /**
  * Solve the convex quadratic program determined by the positive semidefinite
  * matrix `G` and vector `c`, i.e., minimize `(1/2) * x.T * G * x + c.T * x`,
- * subject to the given linear constraints. 
+ * subject to the constraint `A * x >= b`. 
  *
- * @param G
- * @param c
- * @param constraints
- * @param tol
- * @param max_iter
- * @returns
+ * @param G        Symmetric matrix in quadratic objective.
+ * @param c        Vector in linear part of objective. 
+ * @param A        Left-hand constraint matrix.
+ * @param b        Right-hand constraint vector.
+ * @param x_init   Initial iterate (must satisfy constraints).
+ * @param tol      Tolerance for assessing whether a stepsize is zero.
+ * @param max_iter Maximum number of iterations.
+ * @returns        Solution vector, together with indicator of whether algorithm
+ *                 terminated within given maximum number of iterations.  
  * @throws std::runtime_error If `G` is not positive semidefinite.
  */
-template <typename ProgramType, typename ConstraintType = ProgramType>
-Matrix<ProgramType, Dynamic, 1> solveConvexQuadraticProgram(const Ref<const Matrix<ProgramType, Dynamic, Dynamic> >& G,
-                                                            const Ref<const Matrix<ProgramType, Dynamic, 1> >& c,
-                                                            Polytopes::LinearConstraints<ConstraintType>* constraints,
-                                                            const Ref<const Matrix<ProgramType, Dynamic, 1> >& x_init,
-                                                            const ProgramType tol,
-                                                            const int max_iter)
+template <typename T>
+std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<const Matrix<T, Dynamic, Dynamic> >& G,
+                                                                   const Ref<const Matrix<T, Dynamic, 1> >& c,
+                                                                   const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
+                                                                   const Ref<const Matrix<T, Dynamic, 1> >& b,
+                                                                   const Ref<const Matrix<T, Dynamic, 1> >& x_init,
+                                                                   const T tol,
+                                                                   const int max_iter)
 {
-    const int D = constraints->getD();    // Number of variables 
-    const int N = constraints->getN();    // Number of constraints
-    Matrix<ProgramType, Dynamic, Dynamic> A(N, D); 
-    Matrix<ProgramType, Dynamic, 1> b(N);
-    Matrix<ConstraintType, Dynamic, Dynamic> A_ = constraints->getA(); 
-    Matrix<ConstraintType, Dynamic, 1> b_ = constraints->getb(); 
-    for (int i = 0; i < N; ++i)
-    {
-        for (int j = 0; j < D; ++j)
-            A(i, j) = static_cast<ProgramType>(A_(i, j));
-        b(i) = static_cast<ProgramType>(b_(i)); 
-    }
+    const int D = A.cols();    // Number of variables 
+    const int N = A.rows();    // Number of constraints
 
     // Check that G is positive semidefinite by attempting a Cholesky decomposition
-    LDLT<Matrix<ProgramType, Dynamic, Dynamic> > cholesky(G); 
+    LDLT<Matrix<T, Dynamic, Dynamic> > cholesky(G); 
     if (cholesky.info() == Eigen::NumericalIssue || cholesky.isNegative())
         throw std::runtime_error("G is not positive semidefinite");
    
     // Identify working set of active constraints at the initial iterate
-    Matrix<ProgramType, Dynamic, 1> xk = x_init;
-    Matrix<bool, Dynamic, 1> working = constraints->active(xk);
-    
+    Matrix<T, Dynamic, 1> xk = x_init;
+    Matrix<bool, Dynamic, 1> working = ((A * xk).array() == b.array()).matrix();
+    int nw = working.count();
+
+    // Run main loop ... 
+    Matrix<T, Dynamic, 1> solution, bk, gk, lk, sk;
+    Matrix<T, Dynamic, Dynamic> Ak; 
     for (int k = 0; k < max_iter; ++k)
     {
-        int nw = working.count();
-
         // Define and solve the k-th equality-constrained convex QP subproblem
         // (Nocedal & Wright, Eq. 16.39)
-        Matrix<ProgramType, Dynamic, Dynamic> Ak(nw, D);
+        Ak = Matrix<T, Dynamic, Dynamic>::Zero(nw, D);
         int i = 0;  
         for (int j = 0; j < N; ++j)
         {
@@ -118,24 +113,23 @@ Matrix<ProgramType, Dynamic, 1> solveConvexQuadraticProgram(const Ref<const Matr
                 i++; 
             }
         }
-        Matrix<ProgramType, Dynamic, 1> bk = Matrix<ProgramType, Dynamic, 1>::Zero(nw);
-        Matrix<ProgramType, Dynamic, 1> gk = G * xk + c;
-        Matrix<ProgramType, Dynamic, 1> solution
-            = solveEqualityConstrainedConvexQuadraticProgram<ProgramType>(G, gk, Ak, bk);
+        bk = Matrix<T, Dynamic, 1>::Zero(nw);
+        gk = G * xk + c;
+        sk = solveEqualityConstrainedConvexQuadraticProgram<T>(G, gk, Ak, bk);
 
-        // If the solution to the k-th subproblem is (close to) zero ... 
-        if (solution.norm() < tol)
+        // If the solution to the k-th subproblem is (close to) zero ...
+        if (sk.squaredNorm() <= tol * tol)    // To allow for rational types
         {
             // Compute corresponding Lagrange multipliers (Nocedal & Wright,
             // Eq. 16.42)
-            Matrix<ProgramType, Dynamic, 1> lk = Ak.transpose().partialPivLu().solve(gk);
+            lk = Ak.transpose().fullPivLu().solve(gk);
 
             // If all Lagrange multipliers are non-negative among all active 
             // constraints, then the current iterate is in fact a solution 
             // to the main QP 
             if ((lk.array() >= 0).all())
             {
-                return xk;
+                return std::make_pair(xk, true);
             }
             // Otherwise, find the least constraint index for which the Lagrange
             // multiplier is smallest (most negative) and *remove* this constraint
@@ -157,22 +151,25 @@ Matrix<ProgramType, Dynamic, 1> solveConvexQuadraticProgram(const Ref<const Matr
                         i++;
                     }
                 }
+                nw--;
             }
         }
         else    // If the solution to the k-th subproblem is nonzero ... 
         {
             // Compute the stepsize \alpha_k from Nocedal & Wright, Eq. 16.41,
             // keeping track of the blocking constraints 
-            ProgramType alpha = std::numeric_limits<ProgramType>::infinity();
+            T alpha = 1;
             std::vector<int> blocking; 
             for (int j = 0; j < N; ++j)
             {
+                // A blocking constraint is a non-working constraint with
+                // A.row(j).dot(sk) < 0
                 if (!working(j))
                 {
-                    ProgramType q = A.row(j).dot(solution);
+                    T q = A.row(j).dot(sk);
                     if (q < 0)
                     { 
-                        ProgramType bound = (b(j) - A.row(j).dot(xk)) / q;
+                        T bound = (b(j) - A.row(j).dot(xk)) / q;
                         if (alpha > bound)
                         {
                             alpha = bound;
@@ -186,19 +183,28 @@ Matrix<ProgramType, Dynamic, 1> solveConvexQuadraticProgram(const Ref<const Matr
                     }
                 } 
             }
-            ProgramType stepsize = (alpha < 1 ? alpha : 1);
+            T stepsize;
+            if (alpha < 1 || (alpha == 1 && blocking.size() > 0))
+            {
+                stepsize = alpha;
+            }
+            else    // alpha == 1 and blocking is empty 
+            {
+                stepsize = 1;
+            }
 
             // Update the current iterate 
-            xk += stepsize * solution;
+            xk += stepsize * sk;
 
             // If there are any blocking constraints, choose one to add to the
-            // working set 
+            // working active set 
             if (blocking.size() > 0)
                 working(blocking[0]) = true;
+            nw++;
         }
     }
 
-    return xk; 
+    return std::make_pair(xk, false);
 }
 
 #endif
