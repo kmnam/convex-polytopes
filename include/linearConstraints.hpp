@@ -524,9 +524,9 @@ class LinearConstraints
             // The calculations are performed with type U, not T
             Matrix<U, Dynamic, Dynamic> G = 2 * Matrix<U, Dynamic, Dynamic>::Identity(this->D, this->D); 
             Matrix<U, Dynamic, 1> c = -2 * x; 
-            Matrix<U, Dynamic, Dynamic> A_ = (this->A).cast<U>();
-            Matrix<U, Dynamic, 1> b_ = (this->b).cast<U>();
-            Matrix<U, Dynamic, 1> x_init_ = x_init.cast<U>();
+            Matrix<U, Dynamic, Dynamic> A_ = (this->A).template cast<U>();
+            Matrix<U, Dynamic, 1> b_ = (this->b).template cast<U>();
+            Matrix<U, Dynamic, 1> x_init_ = x_init.template cast<U>();
             auto result = solveConvexQuadraticProgram<U>(G, c, A_, b_, x_init_, tol, max_iter);
             if (result.second)
                 throw std::runtime_error("Quadratic program did not return optimal solution");
