@@ -15,7 +15,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/4/2022
+ *     11/6/2022
  */
 using namespace Eigen;
 using boost::multiprecision::mpq_rational;
@@ -101,7 +101,7 @@ std::pair<Matrix<T, Dynamic, 1>, bool> convexQP1(const T tol, const int max_iter
     Matrix<T, Dynamic, 1> x_init(2); 
     x_init << 2, 0;
 
-    return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter);
+    return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter, false);
 }
 
 BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_DOUBLE)
@@ -169,7 +169,8 @@ std::pair<Matrix<T, Dynamic, 1>, bool> convexQP2(const T tol, const int max_iter
     // Initialize solver at (2, 0)
     Matrix<T, Dynamic, 1> x_init(2); 
     x_init << 2, 0;
-    return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter);
+    
+    return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter, false);
 }
 
 BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_DOUBLE)
@@ -237,7 +238,8 @@ std::pair<Matrix<T, Dynamic, 1>, bool> convexQP3(const T tol, const int max_iter
     // Initialize solver at (2, 0)
     Matrix<T, Dynamic, 1> x_init(2);
     x_init << 2, 0;
-    return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter);
+    
+    return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter, false);
 }
 
 BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_DOUBLE)
