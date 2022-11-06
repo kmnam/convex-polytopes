@@ -92,7 +92,12 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
     // Check that G is positive semidefinite by attempting a Cholesky decomposition
     LDLT<Matrix<T, Dynamic, Dynamic> > cholesky(G); 
     if (cholesky.info() == Eigen::NumericalIssue || cholesky.isNegative())
+    {
+        if (verbose)
+            std::cout << "... QP is not convex (matrix is not positive "
+                      << "semidefinite)" << std::endl; 
         throw std::runtime_error("G is not positive semidefinite");
+    }
    
     // Identify working set of active constraints at the initial iterate
     Matrix<T, Dynamic, 1> xk = x_init;
