@@ -1,10 +1,8 @@
 #define BOOST_TEST_MODULE testQuadraticProgram
 #define BOOST_TEST_DYN_LINK
 #include <cmath>
-#include <Eigen/Dense>
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
-#include <boost/multiprecision/eigen.hpp>
 #include <boost/test/included/unit_test.hpp>
 #include "../../include/quadraticProgram.hpp"
 
@@ -109,7 +107,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_DOUBLE)
     const double tol = 1e-8; 
     const int max_iter = 100;
     auto result = convexQP1<double>(tol, max_iter);
-    VectorXd solution = result.first; 
+    VectorXd solution = result.first.head(2); 
     VectorXd correct_solution(2); 
     correct_solution << 1.4, 1.7;
     BOOST_TEST(result.second); 
@@ -121,7 +119,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_MPFR)
     const PreciseType tol = 1e-50;
     const int max_iter = 100;
     auto result = convexQP1<PreciseType>(tol, max_iter);
-    Matrix<PreciseType, Dynamic, 1> solution = result.first;
+    Matrix<PreciseType, Dynamic, 1> solution = result.first.head(2);
     Matrix<PreciseType, Dynamic, 1> correct_solution(2);
     correct_solution << PreciseType("1.4"), PreciseType("1.7");
     BOOST_TEST(result.second); 
@@ -133,7 +131,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_RATIONAL)
     const mpq_rational tol = 0; 
     const int max_iter = 100;
     auto result = convexQP1<mpq_rational>(tol, max_iter);
-    Matrix<mpq_rational, Dynamic, 1> solution = result.first; 
+    Matrix<mpq_rational, Dynamic, 1> solution = result.first.head(2); 
     Matrix<mpq_rational, Dynamic, 1> correct_solution(2); 
     mpq_rational a(14, 10), b(17, 10); 
     correct_solution << a, b;
@@ -178,7 +176,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_DOUBLE)
     const double tol = 1e-8; 
     const int max_iter = 100;
     auto result = convexQP2<double>(tol, max_iter);
-    VectorXd solution = result.first;
+    VectorXd solution = result.first.head(2);
     VectorXd correct_solution(2); 
     correct_solution << 2, 3;
     BOOST_TEST(result.second); 
@@ -190,7 +188,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_MPFR)
     const PreciseType tol = 1e-50; 
     const int max_iter = 100;
     auto result = convexQP2<PreciseType>(tol, max_iter);
-    Matrix<PreciseType, Dynamic, 1> solution = result.first;
+    Matrix<PreciseType, Dynamic, 1> solution = result.first.head(2);
     Matrix<PreciseType, Dynamic, 1> correct_solution(2); 
     correct_solution << 2, 3;
     BOOST_TEST(result.second);
@@ -202,7 +200,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_RATIONAL)
     const mpq_rational tol = 0; 
     const int max_iter = 100;
     auto result = convexQP2<mpq_rational>(tol, max_iter);
-    Matrix<mpq_rational, Dynamic, 1> solution = result.first;
+    Matrix<mpq_rational, Dynamic, 1> solution = result.first.head(2);
     Matrix<mpq_rational, Dynamic, 1> correct_solution(2); 
     correct_solution << 2, 3; 
     BOOST_TEST(result.second);
@@ -247,7 +245,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_DOUBLE)
     const double tol = 1e-8; 
     const int max_iter = 100;
     auto result = convexQP3<double>(tol, max_iter);
-    VectorXd solution = result.first;
+    VectorXd solution = result.first.head(2);
     VectorXd correct_solution(2); 
     correct_solution << 0.5, 1;
     BOOST_TEST(result.second);
@@ -259,7 +257,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_MPFR)
     const PreciseType tol = 1e-50; 
     const int max_iter = 100;
     auto result = convexQP3<PreciseType>(tol, max_iter);
-    Matrix<PreciseType, Dynamic, 1> solution = result.first;
+    Matrix<PreciseType, Dynamic, 1> solution = result.first.head(2);
     Matrix<PreciseType, Dynamic, 1> correct_solution(2); 
     correct_solution << PreciseType("0.5"), 1;
     BOOST_TEST(result.second);
@@ -271,7 +269,7 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_RATIONAL)
     const mpq_rational tol = 0;
     const int max_iter = 100;
     auto result = convexQP3<mpq_rational>(tol, max_iter);  
-    Matrix<mpq_rational, Dynamic, 1> solution = result.first;
+    Matrix<mpq_rational, Dynamic, 1> solution = result.first.head(2);
     Matrix<mpq_rational, Dynamic, 1> correct_solution(2); 
     correct_solution << mpq_rational(1, 2), 1;
     BOOST_TEST(result.second);
