@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam
  *
  * **Last updated:**
- *     11/4/2022
+ *     11/6/2022
  */
 
 #ifndef LINEAR_QUADRATIC_PROGRAMMING_SOLVER_HPP
@@ -53,7 +53,7 @@ Matrix<T, Dynamic, 1> solveEqualityConstrainedConvexQuadraticProgram(const Ref<c
     A_kkt(Eigen::seqN(0, D), Eigen::seqN(D, N)) = -A.transpose();
     b_kkt.head(D) = -c;
     b_kkt.tail(N) = b;
-    Matrix<T, Dynamic, 1> sol_kkt = A_kkt.partialPivLu().solve(b_kkt);
+    Matrix<T, Dynamic, 1> sol_kkt = A_kkt.fullPivLu().solve(b_kkt);
 
     return sol_kkt.head(D);
 }    
@@ -70,6 +70,7 @@ Matrix<T, Dynamic, 1> solveEqualityConstrainedConvexQuadraticProgram(const Ref<c
  * @param x_init   Initial iterate (must satisfy constraints).
  * @param tol      Tolerance for assessing whether a stepsize is zero.
  * @param max_iter Maximum number of iterations.
+ * @param verbose  If true, output intermittent message to `stdout`.
  * @returns        Solution vector (including the associated Lagrange multipliers),
  *                 together with indicator of whether algorithm terminated
  *                 within given maximum number of iterations.  
@@ -82,7 +83,8 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
                                                                    const Ref<const Matrix<T, Dynamic, 1> >& b,
                                                                    const Ref<const Matrix<T, Dynamic, 1> >& x_init,
                                                                    const T tol,
-                                                                   const int max_iter)
+                                                                   const int max_iter,
+                                                                   const bool verbose)
 {
     const int D = A.cols();    // Number of variables 
     const int N = A.rows();    // Number of constraints
@@ -99,13 +101,14 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
 
     // Run main loop ... 
     Matrix<T, Dynamic, 1> solution(D + N), bk, gk, lk, sk;
-    Matrix<T, Dynamic, Dynamic> Ak; 
+    Matrix<T, Dynamic, Dynamic> Ak;
+    int i = 0; 
     for (int k = 0; k < max_iter; ++k)
     {
         // Define and solve the k-th equality-constrained convex QP subproblem
         // (Nocedal & Wright, Eq. 16.39)
         Ak = Matrix<T, Dynamic, Dynamic>::Zero(nw, D);
-        int i = 0;  
+        i = 0;  
         for (int j = 0; j < N; ++j)
         {
             if (working(j))
@@ -123,12 +126,15 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
         {
             // Compute corresponding Lagrange multipliers (Nocedal & Wright,
             // Eq. 16.42)
-            lk = Ak.transpose().fullPivLu().solve(gk);
+            if (nw == 0)
+                lk = Matrix<T, Dynamic, 1>::Zero(nw); 
+            else
+                lk = Ak.transpose().fullPivLu().solve(gk);
 
             // If all Lagrange multipliers are non-negative among all working
             // active constraints, then the current iterate is in fact a
             // solution to the main QP 
-            if ((lk.array() >= 0).all())
+            if (nw == 0 || (lk.array() >= 0).all())
             {
                 solution.head(D) = xk;
                 solution.tail(N) = Matrix<T, Dynamic, 1>::Zero(N);
@@ -141,6 +147,9 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
                         i++;
                     }
                 }
+                if (verbose)
+                    std::cout << "... solved QP within " << k << " iterations"
+                              << std::endl;
                 return std::make_pair(solution, true);
             }
             // Otherwise, find the least constraint index for which the Lagrange
@@ -153,17 +162,17 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
                 i = 0;
                 for (int j = 0; j < N; ++j)
                 {
-                    if (working(j))          // If the j-th constraint is active ...
+                    if (working(j))         // If the j-th constraint is active ...
                     {
                         if (i == minidx)    // ... and it is the active constraint to be removed ... 
                         {
                             working(j) = false;
+                            nw--;           // Update number of working active constraints
                             break;
                         }
                         i++;
                     }
                 }
-                nw--;
             }
         }
         else    // If the solution to the k-th subproblem is nonzero ... 
@@ -211,12 +220,89 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
             // If there are any blocking constraints, choose one to add to the
             // working active set 
             if (blocking.size() > 0)
+            {
                 working(blocking[0]) = true;
-            nw++;
+                nw++;    // Update number of working active constraints
+            }
         }
     }
 
-    solution.head(D) = xk;
+    // Solve one more equality-constrained subproblem ...
+    if (verbose)
+        std::cout << "... completed maximum number of iterations (" << max_iter
+                  << ")" << std::endl; 
+    Ak = Matrix<T, Dynamic, Dynamic>::Zero(nw, D);
+    i = 0;  
+    for (int j = 0; j < N; ++j)
+    {
+        if (working(j))
+        {
+            Ak.row(i) = A.row(j);
+            i++; 
+        }
+    }
+    bk = Matrix<T, Dynamic, 1>::Zero(nw);
+    gk = G * xk + c;
+    sk = solveEqualityConstrainedConvexQuadraticProgram<T>(G, gk, Ak, bk);
+    lk = Ak.transpose().fullPivLu().solve(gk);
+
+    // If the solution to the k-th subproblem is (close to) zero ...
+    if (sk.squaredNorm() <= tol * tol)    // To allow for rational types
+    {
+        // Return the solution with corresponding Lagrange multipliers 
+        solution.head(D) = xk;
+        solution.tail(N) = Matrix<T, Dynamic, 1>::Zero(N);
+        i = 0; 
+        for (int j = 0; j < N; ++j)
+        {
+            if (working(j))
+            {
+                solution(D + j) = lk(i); 
+                i++;
+            }
+        }
+        return std::make_pair(solution, false);
+    }
+    // If the solution to the k-th subproblem is nonzero, then compute the
+    // stepsize \alpha_k from Nocedal & Wright, Eq. 16.41, keeping track of
+    // the blocking constraints 
+    T alpha = 1;
+    std::vector<int> blocking; 
+    for (int j = 0; j < N; ++j)
+    {
+        // A blocking constraint is a non-working constraint with
+        // A.row(j).dot(sk) < 0
+        if (!working(j))
+        {
+            T q = A.row(j).dot(sk);
+            if (q < 0)
+            { 
+                T bound = (b(j) - A.row(j).dot(xk)) / q;
+                if (alpha > bound)
+                {
+                    alpha = bound;
+                    blocking.clear();
+                    blocking.push_back(j); 
+                }
+                else if (alpha == bound)
+                {
+                    blocking.push_back(j); 
+                }
+            }
+        } 
+    }
+    T stepsize;
+    if (alpha < 1 || (alpha == 1 && blocking.size() > 0))
+    {
+        stepsize = alpha;
+    }
+    else    // alpha == 1 and blocking is empty 
+    {
+        stepsize = 1;
+    }
+
+    // Update final iterate and return with corresponding Lagrange multipliers
+    solution.head(D) = xk + stepsize * sk;
     solution.tail(N) = Matrix<T, Dynamic, 1>::Zero(N);
     i = 0; 
     for (int j = 0; j < N; ++j)
