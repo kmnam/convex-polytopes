@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam
  *
  * **Last updated:**
- *     11/6/2022
+ *     11/7/2022
  */
 
 #ifndef LINEAR_QUADRATIC_PROGRAMMING_SOLVER_HPP
@@ -249,7 +249,10 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
     bk = Matrix<T, Dynamic, 1>::Zero(nw);
     gk = G * xk + c;
     sk = solveEqualityConstrainedConvexQuadraticProgram<T>(G, gk, Ak, bk);
-    lk = Ak.transpose().fullPivLu().solve(gk);
+    if (nw == 0)
+        lk = Matrix<T, Dynamic, 1>::Zero(nw); 
+    else
+        lk = Ak.transpose().fullPivLu().solve(gk);
 
     // If the solution to the k-th subproblem is (close to) zero ...
     if (sk.squaredNorm() <= tol * tol)    // To allow for rational types
