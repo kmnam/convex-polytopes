@@ -284,7 +284,6 @@ class LinearConstraints
                 this->type = InequalityType::GreaterThanOrEqualTo;
             this->A *= -1; 
             this->b *= -1; 
-            this->type = type;
             this->updateApproxNearestL2(); 
         }
 
