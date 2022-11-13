@@ -1,15 +1,16 @@
 /**
- * Helper class for representing linear constraints of the form `A * x <=/==/>= b`.
+ * Helper class for representing linear constraints of the form `A * x <=/==/>= b`
+ * with rational scalars.
  *
  * **Authors:**
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/4/2022
+ *     11/13/2022
  */
 
-#ifndef LINEAR_CONSTRAINTS_HPP
-#define LINEAR_CONSTRAINTS_HPP
+#ifndef LINEAR_CONSTRAINTS_RATIONAL_COEFFICIENTS_HPP
+#define LINEAR_CONSTRAINTS_RATIONAL_COEFFICIENTS_HPP
 
 #include <iostream>
 #include <fstream>
@@ -20,12 +21,16 @@
 #include <CGAL/QP_models.h>
 #include <CGAL/QP_functions.h>
 #include <CGAL/Gmpzf.h>
+#include <boost/multiprecision/gmp.hpp>
 #include "quadraticProgram.hpp"
 
 using namespace Eigen;
 typedef CGAL::Gmpzf ET;
 typedef CGAL::Quadratic_program<double> Program;
 typedef CGAL::Quadratic_program_solution<ET> Solution;
+using boost::multiprecision::mpq_rational;
+typedef Matrix<mpq_rational, Dynamic, Dynamic> MatrixXr;
+typedef Matrix<mpq_rational, Dynamic, 1>       VectorXr;
 
 namespace Polytopes {
 
@@ -50,15 +55,14 @@ CGAL::Comparison_result cgalInequalityType(const InequalityType type)
  * A class that implements a set of linear constraints among a set of
  * variables, `A * x <=/==/>= b`.
  */
-template <typename T>
 class LinearConstraints
 {
     protected:
         InequalityType type;              /** Inequality type.                   */
         int D;                            /** Number of variables.               */ 
         int N;                            /** Number of constraints.             */
-        Matrix<T, Dynamic, Dynamic> A;    /** Matrix of constraint coefficients. */ 
-        Matrix<T, Dynamic, 1>       b;    /** Matrix of constraint values.       */ 
+        MatrixXr A;                       /** Matrix of constraint coefficients. */ 
+        VectorXr b;                       /** Matrix of constraint values.       */ 
         Program* approx_nearest_L2;       /** Quadratic program for approximate nearest-point queries. */
 
         /**
@@ -99,8 +103,8 @@ class LinearConstraints
         {
             unsigned D = 0;
             unsigned N = 0;
-            Matrix<T, Dynamic, Dynamic> A(N, D);
-            Matrix<T, Dynamic, 1> b(N);
+            MatrixXr A(N, D);
+            VectorXr b(N);
             
             std::string line;
             std::ifstream infile(filename); 
@@ -111,13 +115,13 @@ class LinearConstraints
                     // Accumulate the entries in each line ...
                     std::stringstream ss(line);
                     std::string token;
-                    std::vector<T> row;
+                    std::vector<mpq_rational> row;
                     N++;
                     while (std::getline(ss, token, ' '))
                     {
                         // Parse each line as a double, then convert to the
                         // scalar type of choice
-                        row.push_back(static_cast<T>(std::stod(token)));
+                        row.push_back(mpq_rational(token));
                     }
 
                     // If this is the first row being parsed, get the number 
@@ -169,8 +173,8 @@ class LinearConstraints
             this->type = type; 
             this->N = 0;
             this->D = 0;
-            this->A = Matrix<T, Dynamic, Dynamic>::Zero(0, 0);
-            this->b = Matrix<T, Dynamic, 1>::Zero(0);
+            this->A = MatrixXr::Zero(0, 0);
+            this->b = VectorXr::Zero(0);
             this->approx_nearest_L2 = new Program(cgalInequalityType(type), false, 0.0, false, 0.0);
         }
 
@@ -183,8 +187,8 @@ class LinearConstraints
          * @param lower Lower bound for all variables. 
          * @param upper Upper bound for all variables. 
          */
-        LinearConstraints(const InequalityType type, const int D, const T lower,
-                          const T upper)
+        LinearConstraints(const InequalityType type, const int D, const mpq_rational lower,
+                          const mpq_rational upper)
         {
             // Each variable has two constraints, one specifying a lower bound
             // and another specifying an upper bound
@@ -195,7 +199,7 @@ class LinearConstraints
             this->b.resize(this->N);
             for (unsigned i = 0; i < this->D; ++i)
             {
-                Matrix<T, Dynamic, 1> v = Matrix<T, Dynamic, 1>::Zero(this->D);
+                VectorXr v = VectorXr::Zero(this->D);
                 v(i) = 1;
                 if (this->type == LessThanOrEqualTo)
                 {
@@ -223,9 +227,8 @@ class LinearConstraints
          * @param A    Left-hand matrix in the constraints.
          * @param b    Right-hand vector in the constraints.  
          */
-        LinearConstraints(const InequalityType type,
-                          const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
-                          const Ref<const Matrix<T, Dynamic, 1> >& b)
+        LinearConstraints(const InequalityType type, const Ref<const MatrixXr>& A,
+                          const Ref<const VectorXr>& b)
         {
             this->type = type; 
             this->A = A;
@@ -291,8 +294,7 @@ class LinearConstraints
          * @param A Left-hand matrix in the constraints. 
          * @param b Right-hand matrix in the constraints. 
          */
-        void setAb(const Ref<const Matrix<T, Dynamic, Dynamic> >& A,
-                   const Ref<const Matrix<T, Dynamic, 1> >& b)
+        void setAb(const Ref<const MatrixXr>& A, const Ref<const VectorXr>& b)
         {
             this->A = A;
             this->b = b;
@@ -359,7 +361,7 @@ class LinearConstraints
         /**
          * Return `this->A`.
          */
-        Matrix<T, Dynamic, Dynamic> getA()
+        MatrixXr getA()
         {
             return this->A;
         }
@@ -367,7 +369,7 @@ class LinearConstraints
         /**
          * Return `this->b`.
          */
-        Matrix<T, Dynamic, 1> getb()
+        VectorXr getb()
         {
             return this->b;
         }
@@ -395,7 +397,7 @@ class LinearConstraints
          * @param x Query vector.
          * @returns True if `this->A * x <=/==/>= this->b`, false otherwise.  
          */
-        bool query(const Ref<const Matrix<T, Dynamic, 1> >& x)
+        bool query(const Ref<const VectorXr>& x)
         {
             if (x.size() != this->D)
             {
@@ -438,7 +440,7 @@ class LinearConstraints
          * @param x Query vector.
          * @returns Boolean vector indicating which constraints are active. 
          */
-        Matrix<bool, Dynamic, 1> active(const Ref<const Matrix<T, Dynamic, 1> >& x)
+        Matrix<bool, Dynamic, 1> active(const Ref<const VectorXr>& x)
         {
             if (x.size() != this->D)
             {
@@ -464,10 +466,10 @@ class LinearConstraints
          *          constraints.  
          */
         template <typename U>
-        Matrix<T, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
+        VectorXr approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x)
         {
             // First check that x itself satisfies the constraints
-            Matrix<T, Dynamic, 1> x_ = x.template cast<T>();
+            VectorXr x_ = x.template cast<mpq_rational>();
             if (this->query(x_)) return x_;
 
             // Otherwise, solve the quadratic program for the nearest point to x
@@ -483,11 +485,11 @@ class LinearConstraints
                 throw std::runtime_error("Failed to compute optimal solution");
 
             // Collect the values of the solution with the desired scalar type
-            Matrix<T, Dynamic, 1> y = Matrix<T, Dynamic, 1>::Zero(this->D);
+            VectorXr y = VectorXr::Zero(this->D);
             unsigned i = 0;
             for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
             {
-                y(i) = static_cast<T>(CGAL::to_double(*it));
+                y(i) = static_cast<mpq_rational>(CGAL::to_double(*it));
                 i++;
             }
             return y;
@@ -511,11 +513,11 @@ class LinearConstraints
          */
         template <typename U>
         Matrix<U, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x,
-                                              const Ref<const Matrix<T, Dynamic, 1> >& x_init,
+                                              const Ref<const VectorXr>& x_init,
                                               const U tol, const int max_iter)
         {
             // First check that x itself satisfies the constraints
-            Matrix<T, Dynamic, 1> x_ = x.template cast<T>();
+            VectorXr x_ = x.template cast<mpq_rational>();
             if (this->query(x_)) return x_;
 
             // Otherwise, solve the quadratic program for the nearest point to x
@@ -529,7 +531,6 @@ class LinearConstraints
             Matrix<U, Dynamic, 1> x_init_ = x_init.template cast<U>();
             auto result = solveConvexQuadraticProgram<U>(G, c, A_, b_, x_init_, tol, max_iter);
             if (!result.second)
-            if (!result.second)
             {
                 std::stringstream ss;
                 ss << "Quadratic program did not converge within given maximum"
@@ -541,63 +542,17 @@ class LinearConstraints
         }
 
         /**
-         * Return the solution to the given linear program, with the feasible 
-         * region given by the stored constraints (`this->A * x <=/==/>= this->b`).
-         *
-         * The linear program seeks to *minimize* the given objective function.
-         *
-         * Note that, while the returned vector has scalar type `T`, the 
-         * linear program is solved with double-precision arithmetic, meaning
-         * that the returned vector may be slightly inaccurate. 
-         *
-         * @param obj Vector of length `this->D` encoding the objective function.
-         * @param c0  Constant term of the objective function.
-         * @returns   Vector solution to the given linear program.  
-         */
-        Matrix<T, Dynamic, 1> solveLinearProgram(const Ref<const Matrix<T, Dynamic, 1> >& obj,
-                                                 const T c0)
-        {
-            // Instantiate the linear program ... 
-            Program* program = new Program(CGAL::SMALLER, false, 0.0, false, 0.0);
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    program->set_a(j, i, static_cast<double>(this->A(i, j)));
-                program->set_b(i, static_cast<double>(this->b(i)));
-                program->set_r(i, cgalInequalityType(this->type)); 
-            }
-            for (unsigned i = 0; i < this->D; ++i)
-                program->set_c(i, static_cast<double>(obj(i))); 
-            program->set_c0(static_cast<double>(c0));
-
-            // ... and (try to) solve it ... 
-            Solution solution = CGAL::solve_quadratic_program(*program, ET());
-            if (solution.is_infeasible())
-                throw std::runtime_error("Quadratic program is infeasible");
-            else if (solution.is_unbounded())
-                throw std::runtime_error("Quadratic program is unbounded");
-            else if (!solution.is_optimal())
-                throw std::runtime_error("Failed to compute optimal solution");
-
-            // ... and return the solution vector
-            Matrix<T, Dynamic, 1> y = Matrix<T, Dynamic, 1>::Zero(this->D);
-            unsigned i = 0;
-            for (auto it = solution.variable_values_begin(); it != solution.variable_values_end(); ++it)
-            {
-                y(i) = static_cast<T>(CGAL::to_double(*it));
-                i++;
-            }
-            delete program; 
-            return y;
-        }
-
-        /**
          * Determine whether the `k`-th stored constraint is redundant.
          *
-         * This is determined here by setting up the linear program excluding
-         * the `k`-th constraint with the objective function set to the 
-         * (right-hand-side of the) constraint. If the constraint is redundant,
-         * then the optimal objective value should satisfy the constraint.
+         * If the inequality type is `IsEqualTo`, this is determined by checking
+         * if the `k`-th constraint lies in the row space of the matrix given 
+         * by the remaining constraints.
+         *
+         * If the inequality type is not `IsEqualTo`, this is determined by
+         * setting up the linear program excluding the `k`-th constraint with
+         * the objective function set to the (right-hand-side of the) constraint.
+         * If the constraint is redundant, then the optimal objective value should
+         * satisfy the constraint.
          *
          * More specifically, if the original constraints are >=, then we 
          * try to *minimize* the `k`-th constraint subject to the others; if 
@@ -610,77 +565,92 @@ class LinearConstraints
          */
         bool isRedundant(const int k)
         {
-            // ----------------------------------------------------------- //
-            // Checking feasibility of the original constraints ...        //
-            // ----------------------------------------------------------- //
-            // Instantiate the linear program with all constraints included ... 
-            Program* program = new Program(cgalInequalityType(this->type), false, 0.0, false, 0.0);
-            for (unsigned i = 0; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    program->set_a(j, i, static_cast<double>(this->A(i, j)));
-                program->set_b(i, static_cast<double>(this->b(i)));
-            }
-            
-            // ... and with zero objective function 
-            for (unsigned i = 0; i < this->D; ++i)
-                program->set_c(i, 0); 
-            program->set_c0(0);
-
-            // Solve the linear program and check that the program is feasible 
-            // to begin with 
-            Solution solution = CGAL::solve_quadratic_program(*program, ET());
-            delete program; 
-            if (solution.is_infeasible())
-                return false; 
-
-            // ----------------------------------------------------------- //
-            // Checking redundancy of the k-th constraint ...
-            // ----------------------------------------------------------- // 
-            // Now instantiate the linear program with the k-th constraint excluded
-            Program* subprogram = new Program(cgalInequalityType(this->type), false, 0.0, false, 0.0); 
-            for (unsigned i = 0; i < k; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    subprogram->set_a(j, i, static_cast<double>(this->A(i, j)));
-                subprogram->set_b(i, static_cast<double>(this->b(i)));
-            }
-            for (unsigned i = k + 1; i < this->N; ++i)
-            {
-                for (unsigned j = 0; j < this->D; ++j)
-                    subprogram->set_a(j, i - 1, static_cast<double>(this->A(i, j)));
-                subprogram->set_b(i - 1, static_cast<double>(this->b(i)));
-            }
-
-            // If the constraints are >=, set the objective function to the
-            // k-th constraint and minimize 
             bool is_redundant = false; 
-            if (this->type == InequalityType::GreaterThanOrEqualTo)
+            if (this->type == IsEqualTo)
             {
-                for (unsigned i = 0; i < this->D; ++i)
-                    subprogram->set_c(i, static_cast<double>(this->A(k, i)));
-                subprogram->set_c0(0);
-                solution = CGAL::solve_quadratic_program(*subprogram, ET());
-                is_redundant = (
-                    !solution.is_infeasible() && solution.is_optimal() &&
-                    solution.objective_value() >= static_cast<double>(this->b(k))
-                ); 
+                MatrixXr A_(this->N - 1, this->D + 1);
+                VectorXr b_(this->D + 1);
+                A_(Eigen::seq(0, k - 1), Eigen::seqN(0, this->D)) = this->A(Eigen::seq(0, k - 1), Eigen::all);
+                A_(Eigen::seq(k + 1, this->N - 1), Eigen::seqN(0, this->D)) = this->A(Eigen::seq(k + 1, this->N - 1), Eigen::all);
+                A_(Eigen::seq(0, k - 1), this->D) = this->b.head(k);
+                A_(Eigen::seq(k + 1, this->N - 1), this->D) = this->b.tail(this->N - 1 - k);
+                b_.head(this->D) = this->A.row(k);
+                b_(this->D) = this->b(k);
+                VectorXr solution = A_.transpose().fullPivLu().solve(b_);
+                is_redundant = (A_.transpose() * solution == b_); 
             }
-            // If the constraints are <=, set the objective function to the
-            // *negative* of the k-th constraint and minimize
             else
             {
+                // ----------------------------------------------------------- //
+                // Checking feasibility of the original constraints ...        //
+                // ----------------------------------------------------------- //
+                // Instantiate the linear program with all constraints included ... 
+                Program* program = new Program(cgalInequalityType(this->type), false, 0.0, false, 0.0);
+                for (unsigned i = 0; i < this->N; ++i)
+                {
+                    for (unsigned j = 0; j < this->D; ++j)
+                        program->set_a(j, i, static_cast<double>(this->A(i, j)));
+                    program->set_b(i, static_cast<double>(this->b(i)));
+                }
+                
+                // ... and with zero objective function 
                 for (unsigned i = 0; i < this->D; ++i)
-                    subprogram->set_c(i, -static_cast<double>(this->A(k, i)));
-                subprogram->set_c0(0);
-                solution = CGAL::solve_quadratic_program(*subprogram, ET());
-                is_redundant = (
-                    !solution.is_infeasible() && solution.is_optimal() &&
-                    solution.objective_value() >= static_cast<double>(-this->b(k))
-                ); 
+                    program->set_c(i, 0); 
+                program->set_c0(0);
+
+                // Solve the linear program and check that the program is feasible 
+                // to begin with 
+                Solution solution = CGAL::solve_quadratic_program(*program, ET());
+                delete program; 
+                if (solution.is_infeasible())
+                    return false; 
+
+                // ----------------------------------------------------------- //
+                // Checking redundancy of the k-th constraint ...
+                // ----------------------------------------------------------- // 
+                // Now instantiate the linear program with the k-th constraint excluded
+                Program* subprogram = new Program(cgalInequalityType(this->type), false, 0.0, false, 0.0); 
+                for (unsigned i = 0; i < k; ++i)
+                {
+                    for (unsigned j = 0; j < this->D; ++j)
+                        subprogram->set_a(j, i, static_cast<double>(this->A(i, j)));
+                    subprogram->set_b(i, static_cast<double>(this->b(i)));
+                }
+                for (unsigned i = k + 1; i < this->N; ++i)
+                {
+                    for (unsigned j = 0; j < this->D; ++j)
+                        subprogram->set_a(j, i - 1, static_cast<double>(this->A(i, j)));
+                    subprogram->set_b(i - 1, static_cast<double>(this->b(i)));
+                }
+
+                // If the constraints are >=, set the objective function to the
+                // k-th constraint and minimize 
+                if (this->type == InequalityType::GreaterThanOrEqualTo)
+                {
+                    for (unsigned i = 0; i < this->D; ++i)
+                        subprogram->set_c(i, static_cast<double>(this->A(k, i)));
+                    subprogram->set_c0(0);
+                    solution = CGAL::solve_quadratic_program(*subprogram, ET());
+                    is_redundant = (
+                        !solution.is_infeasible() && solution.is_optimal() &&
+                        solution.objective_value() >= static_cast<double>(this->b(k))
+                    ); 
+                }
+                // If the constraints are <=, set the objective function to the
+                // *negative* of the k-th constraint and minimize
+                else
+                {
+                    for (unsigned i = 0; i < this->D; ++i)
+                        subprogram->set_c(i, -static_cast<double>(this->A(k, i)));
+                    subprogram->set_c0(0);
+                    solution = CGAL::solve_quadratic_program(*subprogram, ET());
+                    is_redundant = (
+                        !solution.is_infeasible() && solution.is_optimal() &&
+                        solution.objective_value() >= static_cast<double>(-this->b(k))
+                    ); 
+                }
+                delete subprogram;
             }
-            
-            delete subprogram;
             return is_redundant;  
         }
 
