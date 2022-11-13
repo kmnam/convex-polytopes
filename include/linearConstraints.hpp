@@ -457,8 +457,8 @@ class LinearConstraints
          * with respect to L2 (Euclidean) distance, that satisfies the
          * constraints.
          *
-         * The input vector may have scalar type other than `T`, and the 
-         * output has type `T`.
+         * The input vector may have scalar type other than `mpq_rational`,
+         * and the output has type `mpq_rational`.
          * 
          * @param x Query vector. 
          * @returns Vector approximately nearest to query that satisfies the
@@ -499,8 +499,8 @@ class LinearConstraints
          * with respect to L2 (Euclidean) distance, that satisfies the
          * constraints.
          *
-         * The input vector may have scalar type `U` other than `T`, and the 
-         * output has type `U` as well.
+         * The input vector may have scalar type `U` other than `mpq_rational`,
+         * and the output has type `U` as well.
          * 
          * @param x        Query vector.
          * @param x_init   "Initial" vector that satisfies constraints. 
@@ -512,7 +512,7 @@ class LinearConstraints
          */
         template <typename U>
         Matrix<U, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x,
-                                              const Ref<const VectorXr>& x_init,
+                                              const Ref<const Vector<U, Dynamic, 1> >& x_init,
                                               const U tol, const int max_iter)
         {
             // First check that x itself satisfies the constraints
@@ -522,13 +522,12 @@ class LinearConstraints
             // Otherwise, solve the quadratic program for the nearest point to x
             // (Must update linear part of objective)
             //
-            // The calculations are performed with type U, not T
+            // The calculations are performed with type U, not mpq_rational
             Matrix<U, Dynamic, Dynamic> G = 2 * Matrix<U, Dynamic, Dynamic>::Identity(this->D, this->D); 
             Matrix<U, Dynamic, 1> c = -2 * x; 
             Matrix<U, Dynamic, Dynamic> A_ = (this->A).template cast<U>();
             Matrix<U, Dynamic, 1> b_ = (this->b).template cast<U>();
-            Matrix<U, Dynamic, 1> x_init_ = x_init.template cast<U>();
-            auto result = solveConvexQuadraticProgram<U>(G, c, A_, b_, x_init_, tol, max_iter);
+            auto result = solveConvexQuadraticProgram<U>(G, c, A_, b_, x_init, tol, max_iter);
             if (!result.second)
             {
                 std::stringstream ss;
