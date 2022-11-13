@@ -1,9 +1,7 @@
-#define BOOST_TEST_MODULE testQuadraticProgram
-#define BOOST_TEST_DYN_LINK
 #include <cmath>
 #include <boost/multiprecision/gmp.hpp>
 #include <boost/multiprecision/mpfr.hpp>
-#include <boost/test/included/unit_test.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include "../../include/quadraticProgram.hpp"
 
 /**
@@ -13,13 +11,13 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/6/2022
+ *     11/13/2022
  */
 using namespace Eigen;
 using boost::multiprecision::mpq_rational;
 using boost::multiprecision::number;
-using boost::multiprecision::mpfr_float_backend; 
-typedef number<mpfr_float_backend<100> > PreciseType; 
+using boost::multiprecision::mpfr_float_backend;
+typedef number<mpfr_float_backend<100> > PreciseType;
 
 /**
  * Nocedal and Wright, Example 16.2 (an equality-constrained convex quadratic
@@ -43,30 +41,30 @@ Matrix<T, Dynamic, 1> equalityConstrainedConvexQP1()
     return solveEqualityConstrainedConvexQuadraticProgram<T>(G, c, A, b);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_EQUALITY_CONSTRAINED_CONVEX_QP1_DOUBLE)
+TEST_CASE("Equality-constrained convex QP with doubles")
 {
     VectorXd solution = equalityConstrainedConvexQP1<double>(); 
     const double tol = 1e-8;
     VectorXd correct_solution(3); 
     correct_solution << 2, -1, 1;
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE((solution - correct_solution).norm() < tol); 
 }
 
-BOOST_AUTO_TEST_CASE(TEST_EQUALITY_CONSTRAINED_CONVEX_QP1_MPFR)
+TEST_CASE("Equality-constrained convex QP with MPFR floats")
 {
     Matrix<PreciseType, Dynamic, 1> solution = equalityConstrainedConvexQP1<PreciseType>(); 
     const PreciseType tol = 1e-50;
     Matrix<PreciseType, Dynamic, 1> correct_solution(3); 
     correct_solution << 2, -1, 1;
-    BOOST_TEST((solution - correct_solution).norm() < tol); 
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_EQUALITY_CONSTRAINED_CONVEX_QP1_RATIONAL)
+TEST_CASE("Equality-constrained convex QP with GMP rationals")
 {
     Matrix<mpq_rational, Dynamic, 1> solution = equalityConstrainedConvexQP1<mpq_rational>(); 
     Matrix<mpq_rational, Dynamic, 1> correct_solution(3); 
     correct_solution << 2, -1, 1;
-    BOOST_TEST(solution == correct_solution); 
+    REQUIRE(solution == correct_solution);
 }
 
 /**
@@ -102,7 +100,7 @@ std::pair<Matrix<T, Dynamic, 1>, bool> convexQP1(const T tol, const int max_iter
     return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter, false);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_DOUBLE)
+TEST_CASE("Convex QP 1 with doubles")
 {
     const double tol = 1e-8; 
     const int max_iter = 100;
@@ -110,11 +108,11 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_DOUBLE)
     VectorXd solution = result.first.head(2); 
     VectorXd correct_solution(2); 
     correct_solution << 1.4, 1.7;
-    BOOST_TEST(result.second); 
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE(result.second);
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_MPFR)
+TEST_CASE("Convex QP 1 with MPFR floats")
 {
     const PreciseType tol = 1e-50;
     const int max_iter = 100;
@@ -122,11 +120,11 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_MPFR)
     Matrix<PreciseType, Dynamic, 1> solution = result.first.head(2);
     Matrix<PreciseType, Dynamic, 1> correct_solution(2);
     correct_solution << PreciseType("1.4"), PreciseType("1.7");
-    BOOST_TEST(result.second); 
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE(result.second);
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_RATIONAL)
+TEST_CASE("Convex QP 1 with GMP rationals")
 {
     const mpq_rational tol = 0; 
     const int max_iter = 100;
@@ -135,8 +133,8 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP1_RATIONAL)
     Matrix<mpq_rational, Dynamic, 1> correct_solution(2); 
     mpq_rational a(14, 10), b(17, 10); 
     correct_solution << a, b;
-    BOOST_TEST(result.second); 
-    BOOST_TEST(solution == correct_solution);
+    REQUIRE(result.second);
+    REQUIRE(solution == correct_solution);
 }
 
 /**
@@ -171,7 +169,7 @@ std::pair<Matrix<T, Dynamic, 1>, bool> convexQP2(const T tol, const int max_iter
     return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter, false);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_DOUBLE)
+TEST_CASE("Convex QP 2 with doubles")
 {
     const double tol = 1e-8; 
     const int max_iter = 100;
@@ -179,11 +177,11 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_DOUBLE)
     VectorXd solution = result.first.head(2);
     VectorXd correct_solution(2); 
     correct_solution << 2, 3;
-    BOOST_TEST(result.second); 
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE(result.second);
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_MPFR)
+TEST_CASE("Convex QP 2 with MPFR floats")
 {
     const PreciseType tol = 1e-50; 
     const int max_iter = 100;
@@ -191,20 +189,20 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_MPFR)
     Matrix<PreciseType, Dynamic, 1> solution = result.first.head(2);
     Matrix<PreciseType, Dynamic, 1> correct_solution(2); 
     correct_solution << 2, 3;
-    BOOST_TEST(result.second);
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE(result.second);
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP2_RATIONAL)
+TEST_CASE("Convex QP 2 with GMP rationals")
 {
     const mpq_rational tol = 0; 
     const int max_iter = 100;
     auto result = convexQP2<mpq_rational>(tol, max_iter);
     Matrix<mpq_rational, Dynamic, 1> solution = result.first.head(2);
     Matrix<mpq_rational, Dynamic, 1> correct_solution(2); 
-    correct_solution << 2, 3; 
-    BOOST_TEST(result.second);
-    BOOST_TEST(solution == correct_solution);  
+    correct_solution << 2, 3;
+    REQUIRE(result.second);
+    REQUIRE(solution == correct_solution);
 }
 
 /**
@@ -240,7 +238,7 @@ std::pair<Matrix<T, Dynamic, 1>, bool> convexQP3(const T tol, const int max_iter
     return solveConvexQuadraticProgram<T>(G, c, A, b, x_init, tol, max_iter, false);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_DOUBLE)
+TEST_CASE("Convex QP 3 with doubles")
 {
     const double tol = 1e-8; 
     const int max_iter = 100;
@@ -248,11 +246,11 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_DOUBLE)
     VectorXd solution = result.first.head(2);
     VectorXd correct_solution(2); 
     correct_solution << 0.5, 1;
-    BOOST_TEST(result.second);
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE(result.second); 
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_MPFR)
+TEST_CASE("Convex QP 3 with MPFR floats")
 {
     const PreciseType tol = 1e-50; 
     const int max_iter = 100;
@@ -260,11 +258,11 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_MPFR)
     Matrix<PreciseType, Dynamic, 1> solution = result.first.head(2);
     Matrix<PreciseType, Dynamic, 1> correct_solution(2); 
     correct_solution << PreciseType("0.5"), 1;
-    BOOST_TEST(result.second);
-    BOOST_TEST((solution - correct_solution).norm() < tol);
+    REQUIRE(result.second);
+    REQUIRE((solution - correct_solution).norm() < tol);
 }
 
-BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_RATIONAL)
+TEST_CASE("Convex QP 3 with GMP rationals")
 {
     const mpq_rational tol = 0;
     const int max_iter = 100;
@@ -272,6 +270,6 @@ BOOST_AUTO_TEST_CASE(TEST_CONVEX_QP3_RATIONAL)
     Matrix<mpq_rational, Dynamic, 1> solution = result.first.head(2);
     Matrix<mpq_rational, Dynamic, 1> correct_solution(2); 
     correct_solution << mpq_rational(1, 2), 1;
-    BOOST_TEST(result.second);
-    BOOST_TEST(solution == correct_solution);
+    REQUIRE(result.second);
+    REQUIRE(solution == correct_solution);
 }
