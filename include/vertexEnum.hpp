@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/1/2022
+ *     11/13/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -34,7 +34,7 @@ using boost::multiprecision::mpq_rational;
 
 namespace Polytopes {
 
-class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstraints<mpq_rational>
+class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstraints
 {
     protected:
         /**
@@ -82,7 +82,7 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
          * @param b    Right-hand vector in polytope constraints. 
          */
         PolyhedralDictionarySystem(const InequalityType type) 
-            : DictionarySystem(), LinearConstraints<mpq_rational>(type)
+            : DictionarySystem(), LinearConstraints(type)
         {
             this->updateCore(); 
             this->updateDictCoefs();
@@ -99,7 +99,7 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         PolyhedralDictionarySystem(const InequalityType type, 
                                    const Ref<const MatrixXr>& A, 
                                    const Ref<const VectorXr>& b)
-            : DictionarySystem(), LinearConstraints<mpq_rational>(type, A, b) 
+            : DictionarySystem(), LinearConstraints(type, A, b) 
         {
             this->updateCore(); 
             this->updateDictCoefs();
@@ -307,7 +307,10 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         }
 };
 
-class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<mpq_rational>
+/**
+ * TODO Write tests for this class
+ */
+class HyperplaneArrangement : public DictionarySystem, public LinearConstraints
 {
     protected:
         /**
@@ -316,9 +319,9 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
         void updateCore()
         {
             this->rows = this->N - this->D + 1; 
-            this->cols = this->N + 2; 
+            this->cols = this->D + 1; 
             this->f = this->N; 
-            this->fi = this->N - this->D; 
+            this->fi = this->N - this->D;
             this->g = this->N + 1;  
             this->gi = this->D;
 
@@ -371,8 +374,7 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
          * Empty constructor.
          */
         HyperplaneArrangement()
-            : DictionarySystem(),
-              LinearConstraints<mpq_rational>(InequalityType::IsEqualTo) 
+            : DictionarySystem(), LinearConstraints(InequalityType::IsEqualTo) 
         {
             this->updateCore(); 
             this->updateDictCoefs();
@@ -386,8 +388,7 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
          * @param b Right-hand vector in hyperplane arrangement.
          */
         HyperplaneArrangement(const Ref<const MatrixXr>& A, const Ref<const VectorXr>& b)
-            : DictionarySystem(),
-              LinearConstraints<mpq_rational>(InequalityType::IsEqualTo, A, b) 
+            : DictionarySystem(), LinearConstraints(InequalityType::IsEqualTo, A, b) 
         {
             this->updateCore(); 
             this->updateDictCoefs();
@@ -410,6 +411,7 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
          */
         void parse(const std::string filename)
         {
+            std::cout << "are you here at least?\n";
             try
             {
                 this->__parse(filename, InequalityType::IsEqualTo);
@@ -418,7 +420,39 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints<
             {
                 throw; 
             }
+            std::cout << "what about here?\n";
+            std::cout << this->D << std::endl;
+            std::cout << this->N << std::endl;
             this->removeRedundantConstraints();
+        }
+
+        /**
+         * Remove all redundant constraints by iterating through them in the 
+         * order they are given in `this->A` and `this->b`, then update 
+         * `this->core_A`, `this->dict_coefs`, and `this->basic_solution`.  
+         */
+        void removeRedundantConstraints()
+        {
+            unsigned i = 0; 
+            while (i < this->N) 
+            {
+                // If the i-th constraint is redundant, remove it and reset 
+                // i to zero (start from the beginning of the reduced system)
+                if (this->isRedundant(i))
+                {
+                    this->removeConstraint(i);
+                    i = 0; 
+                }
+                // Otherwise, keep going 
+                else 
+                {
+                    i++; 
+                }
+            }
+            this->updateApproxNearestL2(); 
+            this->updateCore(); 
+            this->updateDictCoefs(); 
+            this->updateBasicSolution(); 
         }
 
         /**
