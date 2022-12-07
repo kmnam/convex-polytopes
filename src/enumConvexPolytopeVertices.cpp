@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     7/11/2022
+ *     12/7/2022
  */
 
 #include <iostream>
@@ -21,31 +21,29 @@ using Polytopes::InequalityType;
 
 int main(int argc, char** argv)
 {
+    // Check that the input file name was specified 
+    if (argc != 2)
+        throw std::runtime_error("Invalid call signature"); 
+
     // Parse the input file containing the polytope's linear constraints ... 
     std::string filename = argv[1];
 
     // ... and instantiate the corresponding polyhedral dictionary system 
     PolyhedralDictionarySystem* dict = new PolyhedralDictionarySystem(InequalityType::LessThanOrEqualTo);
-    if (argc == 3)
-    {
-        std::string arg = argv[2];
-        if (arg == "--geq") 
-            dict->parse(filename, InequalityType::GreaterThanOrEqualTo);
-        else 
-            throw std::runtime_error("Invalid call signature"); 
-    } 
-    else if (argc == 2)
-    { 
-        dict->parse(filename);
-    }
-    else
-    {
-        throw std::runtime_error("Invalid call signature");
-    }
+    dict->parse(filename);
+
+    // If the input inequalities were specified as >=, switch to <=
+    if (dict->getInequalityType() == InequalityType::GreaterThanOrEqualTo)
+        dict->switchInequalityType(); 
      
     // Print the enumerated vertices to stdout
-    Matrix<mpq_rational, Dynamic, Dynamic> vertices = dict->enumVertices(); 
-    std::cout << vertices << std::endl;  
+    Matrix<mpq_rational, Dynamic, Dynamic> vertices = dict->enumVertices();
+    for (int i = 0; i < vertices.rows(); ++i)
+    {
+        for (int j = 0; j < vertices.cols() - 1; ++j)
+            std::cout << vertices(i, j) << " ";
+        std::cout << vertices(i, vertices.cols() - 1) << std::endl; 
+    } 
 
     delete dict; 
     return 0; 

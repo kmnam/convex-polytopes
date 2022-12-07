@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     3/3/2022
+ *     12/7/2022
  */
 
 #include <iostream>
@@ -20,6 +20,10 @@ const int INTERNAL_PRECISION = 100;
 
 int main(int argc, char** argv)
 {
+    // Check input arguments 
+    if (argc != 3)
+        throw std::runtime_error("Invalid call signature");
+
     // Initialize the random number generator 
     boost::random::mt19937 rng(1234567890); 
 
