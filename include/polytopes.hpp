@@ -695,6 +695,61 @@ void triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& verti
 
 /**
  * Parse the given .vert file specifying a convex polytope in terms of its 
+ * vertices, and return the matrix of vertex coordinates.
+ *
+ * The file is assumed to be non-empty.
+ *
+ * @param filename Path to input .vert polytope triangulation file. 
+ * @returns        Matrix of vertex coordinates.
+ */
+Matrix<mpq_rational, Dynamic, Dynamic> parseVertexCoords(const std::string filename)
+{
+    // TODO Migrate to new parse.hpp file for simple parsing functions?
+
+    // Parse the *first* line of the given input file to obtain the dimension
+    // of the polytope's ambient space 
+    std::string line, token; 
+    std::ifstream infile(filename);
+    std::getline(infile, line);
+
+    // Each vertex is specified as a space-delimited string of N coefficients,
+    // where N is the dimension of the ambient space 
+    std::stringstream ss_first; 
+    ss_first << line; 
+    std::vector<mpq_rational> vertex_first; 
+    while (std::getline(ss_first, token, ' '))
+        vertex_first.push_back(mpq_rational(token)); 
+    int dim = vertex_first.size();
+
+    // Parse each subsequent line and store vertices in matrix
+    int n = 1;  
+    Matrix<mpq_rational, Dynamic, Dynamic> vertices(n, dim);
+    for (int i = 0; i < dim; ++i)
+        vertices(0, i) = vertex_first[i]; 
+    while (std::getline(infile, line))
+    {
+        std::stringstream ss; 
+        std::vector<mpq_rational> vertex; 
+        ss << line;
+        while (std::getline(ss, token, ' '))
+            vertex.push_back(mpq_rational(token));
+       
+        // Does the current vertex match all previous vertices in length? 
+        if (vertex.size() != dim)
+            throw std::runtime_error("Vertices of multiple dimensions specified in input file");
+
+        // Add vertex coordinates to matrix
+        n++;
+        vertices.conservativeResize(n, dim);
+        for (int i = 0; i < dim; ++i)
+            vertices(n - 1, i) = vertex[i]; 
+    }
+
+    return vertices; 
+}
+
+/**
+ * Parse the given .vert file specifying a convex polytope in terms of its 
  * *vertices*, and return the Delaunay triangulation of the convex polytope.
  *
  * The file is assumed to be non-empty.  
@@ -704,6 +759,8 @@ void triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& verti
  */
 Delaunay_triangulation parseVerticesFile(const std::string filename) 
 {
+    // TODO Do the vertices have to be parsed and input as doubles?
+
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
@@ -756,6 +813,8 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  */
 Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_triangulation& tri) 
 {
+    // TODO Do the vertices have to be parsed and input as doubles?
+
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
@@ -810,6 +869,8 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
  */
 void parseVerticesFile(const std::string filename, Delaunay_triangulation* tri) 
 {
+    // TODO Do the vertices have to be parsed and input as doubles?
+
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
