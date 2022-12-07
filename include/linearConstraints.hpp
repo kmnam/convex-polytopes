@@ -88,18 +88,17 @@ class LinearConstraints
         }
 
         /**
-         * Given a file specifying a convex polytope in terms of half-spaces
+         * Given a .poly file specifying a convex polytope in terms of half-spaces
          * (inequalities), read in the constraint matrix and vector.
          *
-         * This is the internal protected method used in `parse(filename)` and
-         * `parse(filename, type)`. 
+         * This is the internal protected method used in `parse(filename)`.
+         *
+         * This method overwrites `this->type` as given in the input file.
          *
          * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type of the constraints in the file. 
-         *                 (If `type` does not match `this->type`, then the
-         *                 constraints are converted to `this->type`.)
+         * @throws std::runtime_error If the input file has formatting errors.
          */
-        void __parse(const std::string filename, const InequalityType type)
+        void __parse(const std::string filename)
         {
             unsigned D = 0;
             unsigned N = 0;
@@ -107,20 +106,36 @@ class LinearConstraints
             VectorXr b(N);
             
             std::string line;
-            std::ifstream infile(filename); 
+            std::ifstream infile(filename);
             if (infile.is_open())
             {
+                // Parse first line for inequality type 
+                std::getline(infile, line);
+                if (line == "LEQ")
+                {
+                    this->type = InequalityType::LessThanOrEqualTo;
+                }
+                else if (line == "GEQ")
+                {
+                    this->type = InequalityType::GreaterThanOrEqualTo;
+                }
+                else 
+                {
+                    std::stringstream ss; 
+                    ss << "Invalid inequality type specified: " << line; 
+                    throw std::runtime_error(ss.str()); 
+                } 
+
+                // Accumulate the entries in each subsequent line ...
                 while (std::getline(infile, line))
                 {
-                    // Accumulate the entries in each line ...
                     std::stringstream ss(line);
                     std::string token;
                     std::vector<mpq_rational> row;
                     N++;
                     while (std::getline(ss, token, ' '))
                     {
-                        // Parse each line as a double, then convert to the
-                        // scalar type of choice
+                        // Parse each line as a row of rational numbers
                         row.push_back(mpq_rational(token));
                     }
 
@@ -137,18 +152,9 @@ class LinearConstraints
                     //
                     A.conservativeResize(N, D);
                     b.conservativeResize(N);
-                    if (type != this->type)
-                    {
-                        for (unsigned i = 1; i < row.size(); ++i)
-                            A(N-1, i-1) = -row[i];
-                        b(N-1) = row[0];
-                    }
-                    else 
-                    {
-                        for (unsigned i = 1; i < row.size(); ++i)
-                            A(N-1, i-1) = row[i]; 
-                        b(N-1) = -row[0];
-                    }
+                    for (unsigned i = 1; i < row.size(); ++i)
+                        A(N - 1, i - 1) = row[i]; 
+                    b(N - 1) = -row[0];
                 }
                 infile.close();
             }
@@ -320,30 +326,9 @@ class LinearConstraints
         {
             try
             {
-                this->__parse(filename, this->type);
+                this->__parse(filename);
             }
             catch (const std::invalid_argument& e) 
-            {
-                throw; 
-            }
-        }
-
-        /**
-         * Given a file specifying a convex polytope in terms of half-spaces
-         * (inequalities), read in the constraint matrix and vector.
-         *
-         * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type of the constraints in the file. 
-         *                 (If `type` does not match `this->type`, then the
-         *                 constraints are converted to `this->type`.)
-         */
-        void parse(const std::string filename, const InequalityType type)
-        {
-            try
-            {
-                this->__parse(filename, type);
-            }
-            catch (const std::invalid_argument& e)
             {
                 throw; 
             }
@@ -512,7 +497,7 @@ class LinearConstraints
          */
         template <typename U>
         Matrix<U, Dynamic, 1> approxNearestL2(const Ref<const Matrix<U, Dynamic, 1> >& x,
-                                              const Ref<const Vector<U, Dynamic, 1> >& x_init,
+                                              const Ref<const Matrix<U, Dynamic, 1> >& x_init,
                                               const U tol, const int max_iter)
         {
             // First check that x itself satisfies the constraints
