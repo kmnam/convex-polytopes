@@ -13,7 +13,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/13/2022
+ *     12/8/2022
  */
 
 #ifndef VERTEX_ENUM_AVIS_FUKUDA_HPP
@@ -114,7 +114,7 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         }
 
         /**
-         * Given a file specifying a convex polytope in terms of half-spaces 
+         * Given a .poly file specifying a convex polytope in terms of half-spaces 
          * (inequalities), read in the constraint matrix and vector, remove 
          * redundant constraints, and overwrite the dictionary system. 
          *
@@ -124,36 +124,13 @@ class PolyhedralDictionarySystem : public DictionarySystem, public LinearConstra
         {
             try
             {
-                this->__parse(filename, this->type);
+                this->__parse(filename);
             }
             catch (const std::invalid_argument& e)
             {
                 throw; 
             }
             this->removeRedundantConstraints();
-        }
-
-        /**
-         * Given a file specifying a convex polytope in terms of half-spaces 
-         * (inequalities), read in the constraint matrix and vector, remove 
-         * redundant constraints, and overwrite the dictionary system. 
-         *
-         * @param filename Path to file containing the polytope constraints.
-         * @param type     Inequality type of the constraints in the file. 
-         *                 (If `type` does not match `this->type`, then the
-         *                 constraints are converted to `this->type`.)
-         */
-        void parse(const std::string filename, const InequalityType type)
-        {
-            try
-            {
-                this->__parse(filename, type);
-            }
-            catch (const std::invalid_argument& e)
-            {
-                throw; 
-            }
-            this->removeRedundantConstraints(); 
         }
 
         /**
@@ -403,27 +380,27 @@ class HyperplaneArrangement : public DictionarySystem, public LinearConstraints
         }
 
         /**
-         * Given a file specifying a hyperplane arrangement, read in the
+         * Given a .poly file specifying a hyperplane arrangement, read in the
          * constraint matrix and vector, remove redundant constraints, and
-         * overwrite the dictionary system. 
+         * overwrite the dictionary system.
+         *
+         * The inequality type in the file is ignored and `this->type` is 
+         * set to `IsEqualTo`. 
          *
          * @param filename Path to file containing the polytope constraints.
          */
         void parse(const std::string filename)
         {
-            std::cout << "are you here at least?\n";
             try
             {
-                this->__parse(filename, InequalityType::IsEqualTo);
+                this->__parse(filename);
             }
             catch (const std::invalid_argument& e)
             {
                 throw; 
             }
-            std::cout << "what about here?\n";
-            std::cout << this->D << std::endl;
-            std::cout << this->N << std::endl;
             this->removeRedundantConstraints();
+            this->type = InequalityType::IsEqualTo;   // Set inequality type to ==
         }
 
         /**
