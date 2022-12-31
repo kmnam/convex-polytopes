@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     11/13/2022
+ *     12/31/2022
  */
 
 #ifndef LINEAR_CONSTRAINTS_RATIONAL_COEFFICIENTS_HPP
@@ -21,6 +21,7 @@
 #include <CGAL/QP_models.h>
 #include <CGAL/QP_functions.h>
 #include <CGAL/Gmpzf.h>
+#include "boostMultiprecisionEigen.hpp"
 #include <boost/multiprecision/gmp.hpp>
 #include "quadraticProgram.hpp"
 
