@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     7/18/2022
+ *     1/2/2023
  */
 
 #ifndef POLYTOPES_HPP 
@@ -704,8 +704,6 @@ void triangulate(const Ref<const Matrix<mpq_rational, Dynamic, Dynamic> >& verti
  */
 Matrix<mpq_rational, Dynamic, Dynamic> parseVertexCoords(const std::string filename)
 {
-    // TODO Migrate to new parse.hpp file for simple parsing functions?
-
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
