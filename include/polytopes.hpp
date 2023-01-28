@@ -286,10 +286,7 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation& tri)
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
             for (int j = 0; j < dim; ++j)
-            {
-                std::cout << p[j] << " " << CGAL::to_double(p[j]) << " " << static_cast<mpq_rational>(CGAL::to_double(p[j])) << " " << static_cast<mpq_rational>(p[j]) << std::endl;
                 face_vertex_coords(i, j) = static_cast<mpq_rational>(p[j]);
-            } 
         }
         faces.emplace_back(Simplex(face_vertex_coords));
     }
@@ -321,10 +318,7 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation* tri)
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
             for (int j = 0; j < dim; ++j)
-            {
-                std::cout << p[j] << " " << CGAL::to_double(p[j]) << " " << static_cast<mpq_rational>(CGAL::to_double(p[j])) << " " << static_cast<mpq_rational>(p[j]) << std::endl;
                 face_vertex_coords(i, j) = static_cast<mpq_rational>(p[j]);
-            } 
         }
         faces.emplace_back(Simplex(face_vertex_coords));
     }
