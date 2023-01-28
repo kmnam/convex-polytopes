@@ -5,7 +5,7 @@
  *     Kee-Myoung Nam, Department of Systems Biology, Harvard Medical School
  *
  * **Last updated:**
- *     1/2/2023
+ *     1/28/2023
  */
 
 #ifndef POLYTOPES_HPP 
@@ -757,8 +757,6 @@ Matrix<mpq_rational, Dynamic, Dynamic> parseVertexCoords(const std::string filen
  */
 Delaunay_triangulation parseVerticesFile(const std::string filename) 
 {
-    // TODO Do the vertices have to be parsed and input as doubles?
-
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
@@ -769,9 +767,9 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
     // where N is the dimension of the ambient space 
     std::stringstream ss_first; 
     ss_first << line; 
-    std::vector<double> vertex_first; 
+    std::vector<mpq_rational> vertex_first; 
     while (std::getline(ss_first, token, ' '))
-        vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
+        vertex_first.push_back(mpq_rational(token));    // Parse each vertex as rational vector
     int dim = vertex_first.size();
 
     // Instantiate the Delaunay triangulation and insert the first point
@@ -782,10 +780,10 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
     while (std::getline(infile, line))
     {
         std::stringstream ss; 
-        std::vector<double> vertex; 
+        std::vector<mpq_rational> vertex; 
         ss << line;
         while (std::getline(ss, token, ' '))
-            vertex.push_back(std::stod(token));    // Store each vertex with double scalars 
+            vertex.push_back(mpq_rational(token));    // Parse each vertex as rational vector
        
         // Does the current vertex match all previous vertices in length? 
         if (vertex.size() != dim)
@@ -811,8 +809,6 @@ Delaunay_triangulation parseVerticesFile(const std::string filename)
  */
 Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_triangulation& tri) 
 {
-    // TODO Do the vertices have to be parsed and input as doubles?
-
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
@@ -823,9 +819,9 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
     // where N is the dimension of the ambient space 
     std::stringstream ss_first; 
     ss_first << line; 
-    std::vector<double> vertex_first; 
+    std::vector<mpq_rational> vertex_first; 
     while (std::getline(ss_first, token, ' '))
-        vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
+        vertex_first.push_back(mpq_rational(token));    // Parse each vertex as rational vector
     int dim = vertex_first.size();
 
     // Clear the existing triangulation
@@ -838,10 +834,10 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
     while (std::getline(infile, line))
     {
         std::stringstream ss; 
-        std::vector<double> vertex; 
+        std::vector<mpq_rational> vertex; 
         ss << line;
         while (std::getline(ss, token, ' '))
-            vertex.push_back(std::stod(token));    // Store each vertex with double scalars 
+            vertex.push_back(mpq_rational(token));    // Parse each vertex as rational vector
        
         // Does the current vertex match all previous vertices in length? 
         if (vertex.size() != dim)
