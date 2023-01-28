@@ -318,7 +318,10 @@ std::vector<Simplex> getFullDimFaces(Delaunay_triangulation* tri)
             // Get the coordinates of the i-th vertex 
             Point p = it->vertex(i)->point();
             for (int j = 0; j < dim; ++j)
-                face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));  
+            {
+                std::cout << p[j] << " " << CGAL::to_double(p[j]) << " " << static_cast<mpq_rational>(CGAL::to_double(p[j])) << std::endl;
+                face_vertex_coords(i, j) = static_cast<mpq_rational>(CGAL::to_double(p[j]));
+            } 
         }
         faces.emplace_back(Simplex(face_vertex_coords));
     }
@@ -863,8 +866,6 @@ Delaunay_triangulation& parseVerticesFile(const std::string filename, Delaunay_t
  */
 void parseVerticesFile(const std::string filename, Delaunay_triangulation* tri) 
 {
-    // TODO Do the vertices have to be parsed and input as doubles?
-
     // Parse the *first* line of the given input file to obtain the dimension
     // of the polytope's ambient space 
     std::string line, token; 
@@ -875,9 +876,9 @@ void parseVerticesFile(const std::string filename, Delaunay_triangulation* tri)
     // where N is the dimension of the ambient space 
     std::stringstream ss_first; 
     ss_first << line; 
-    std::vector<double> vertex_first; 
+    std::vector<mpq_rational> vertex_first; 
     while (std::getline(ss_first, token, ' '))
-        vertex_first.push_back(std::stod(token));  // Store each vertex with double scalars 
+        vertex_first.push_back(mpq_rational(token));    // Parse each vertex as rational vector
     int dim = vertex_first.size();
 
     // Clear the existing triangulation
@@ -890,10 +891,10 @@ void parseVerticesFile(const std::string filename, Delaunay_triangulation* tri)
     while (std::getline(infile, line))
     {
         std::stringstream ss; 
-        std::vector<double> vertex; 
+        std::vector<mpq_rational> vertex; 
         ss << line;
         while (std::getline(ss, token, ' '))
-            vertex.push_back(std::stod(token));    // Store each vertex with double scalars 
+            vertex.push_back(mpq_rational(token));    // Parse each vertex as rational vector
        
         // Does the current vertex match all previous vertices in length? 
         if (vertex.size() != dim)
