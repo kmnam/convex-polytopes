@@ -6,7 +6,7 @@
  *     Kee-Myoung Nam
  *
  * **Last updated:**
- *     11/7/2022
+ *     3/29/2023
  */
 
 #ifndef LINEAR_QUADRATIC_PROGRAMMING_SOLVER_HPP
@@ -89,15 +89,19 @@ std::pair<Matrix<T, Dynamic, 1>, bool> solveConvexQuadraticProgram(const Ref<con
     const int D = A.cols();    // Number of variables 
     const int N = A.rows();    // Number of constraints
 
-    // Check that G is positive semidefinite by attempting a Cholesky decomposition
-    LDLT<Matrix<T, Dynamic, Dynamic> > cholesky(G); 
-    if (cholesky.info() == Eigen::NumericalIssue || cholesky.isNegative())
-    {
-        if (verbose)
-            std::cout << "... QP is not convex (matrix is not positive "
-                      << "semidefinite)" << std::endl; 
-        throw std::runtime_error("G is not positive semidefinite");
-    }
+    // If G is nonzero, check that G is positive semidefinite by attempting a
+	// Cholesky decomposition
+	if (G != Matrix<T, Dynamic, Dynamic>::Zero(D, D))
+	{
+		LDLT<Matrix<T, Dynamic, Dynamic> > cholesky(G); 
+		if (cholesky.info() == Eigen::NumericalIssue || cholesky.isNegative())
+		{
+			if (verbose)
+				std::cout << "... QP is not convex (matrix is not positive "
+						  << "semidefinite)" << std::endl; 
+			throw std::runtime_error("G is not positive semidefinite");
+		}
+	}
    
     // Identify working set of active constraints at the initial iterate
     Matrix<T, Dynamic, 1> xk = x_init;
